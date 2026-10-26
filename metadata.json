@@ -1,0 +1,6 @@
+{
+  "name": "Encontro Certo MG",
+  "description": "Aplicativo de relacionamento e amizade em Minas Gerais com moeda gamificada, jogos e jeitinho mineiro.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
