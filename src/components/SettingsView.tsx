@@ -1,5 +1,5 @@
 import React from 'react';
-import { Settings, Bell, MapPin, Eye, Sparkles } from 'lucide-react';
+import { Settings, Bell, MapPin, Eye, DollarSign, Shield, FileText, Info } from 'lucide-react';
 import { UserProfile, EstadoConfig } from '../types';
 import { StateSelector } from './StateSelector';
 
@@ -9,6 +9,7 @@ interface SettingsViewProps {
   onSelectEstado: (sigla: string) => void;
   onUpdateSettings: (updates: Partial<UserProfile>) => void;
   onOpenProfileEdit: () => void;
+  onOpenCompliance?: (tab: 'privacy' | 'terms' | 'about' | 'contact' | 'adsense') => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -17,6 +18,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onSelectEstado,
   onUpdateSettings,
   onOpenProfileEdit,
+  onOpenCompliance,
 }) => {
   return (
     <div className="max-w-2xl mx-auto py-6 px-4 space-y-6">
@@ -113,6 +115,41 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             }}
           />
         </div>
+
+        {/* AdSense & Legal Section */}
+        {onOpenCompliance && (
+          <div className="p-4 rounded-2xl bg-[#2A231D] border border-[#382E24] space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-bold text-sm text-[#F5E9D3] flex items-center gap-1.5">
+                  <DollarSign className="w-4 h-4 text-[#E8A838]" />
+                  Google AdSense & Transparência LGPD
+                </h4>
+                <p className="text-xs text-[#C8B8A0]">
+                  Gere receita com anúncios e consulte Políticas de Privacidade, Termos e Arquivo ads.txt
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                onClick={() => onOpenCompliance('adsense')}
+                className="py-2 px-3 rounded-xl bg-[#120F0D] hover:bg-[#1E1915] border border-[#382E24] text-[11px] font-bold text-[#E8A838] flex items-center justify-center gap-1.5"
+              >
+                <DollarSign className="w-3.5 h-3.5" />
+                Painel AdSense
+              </button>
+
+              <button
+                onClick={() => onOpenCompliance('privacy')}
+                className="py-2 px-3 rounded-xl bg-[#120F0D] hover:bg-[#1E1915] border border-[#382E24] text-[11px] font-bold text-[#F5E9D3] flex items-center justify-center gap-1.5"
+              >
+                <Shield className="w-3.5 h-3.5 text-[#E8A838]" />
+                Privacidade LGPD
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Logout / Switch Account with State Farewell phrase */}
         <div className="pt-4 border-t border-[#382E24] space-y-2">

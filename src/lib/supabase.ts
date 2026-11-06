@@ -1,11 +1,35 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-key';
+function getValidSupabaseUrl(url?: string): string {
+  if (!url || typeof url !== 'string') return 'https://placeholder.supabase.co';
+  try {
+    const parsed = new URL(url.trim());
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return parsed.toString();
+    }
+  } catch (err) {
+    // URL inválida (ex: 'sua_url_aqui')
+  }
+  return 'https://placeholder.supabase.co';
+}
 
-export const isSupabaseConfigured = 
-  Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY && 
-  !import.meta.env.VITE_SUPABASE_URL.includes('seu-projeto'));
+const rawUrl = import.meta.env.VITE_SUPABASE_URL;
+const rawKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+const supabaseUrl = getValidSupabaseUrl(rawUrl);
+const supabaseAnonKey =
+  rawKey && typeof rawKey === 'string' && rawKey.length > 10
+    ? rawKey
+    : 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsYWNlaG9sZGVyIiwicm9sZSI6ImFub24iLCJpYXQiOjE2MDAwMDAwMDAsImV4cCI6MjAwMDAwMDAwMH0.placeholder';
+
+export const isSupabaseConfigured = Boolean(
+  rawUrl &&
+    typeof rawUrl === 'string' &&
+    rawUrl.startsWith('http') &&
+    !rawUrl.includes('sua_url_aqui') &&
+    !rawUrl.includes('seu-projeto') &&
+    !rawUrl.includes('placeholder')
+);
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 

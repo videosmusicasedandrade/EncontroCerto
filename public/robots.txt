@@ -1,0 +1,10 @@
+# Robots.txt - Encontro Certo Brasil
+User-agent: *
+Allow: /
+Disallow: /admin
+
+# Permitir acesso irrestrito ao rastreador do Google AdSense
+User-agent: Mediapartners-Google
+Allow: /
+
+Sitemap: https://encontrocertobrasil.com.br/sitemap.xml

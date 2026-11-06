@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Heart, MessageSquare, Edit3, Trash2, Send, Sparkles, Coins, ThumbsUp, Circle, MapPin } from 'lucide-react';
 import { Postagem, UserProfile, CertcoinLote, Nota, EstadoConfig } from '../types';
 import { StateSelector } from './StateSelector';
+import { AdSenseUnit } from './AdSenseUnit';
 import { calcularDistancia } from '../lib/supabase';
 
 interface FeedViewProps {
@@ -133,6 +134,9 @@ export const FeedView: React.FC<FeedViewProps> = ({
           </div>
         </form>
       </div>
+
+      {/* Google AdSense Responsive Unit */}
+      <AdSenseUnit estadoConfig={estadoConfig} slotId="1000000001" label="Anúncio no Feed" />
 
       {/* Filter Tabs */}
       <div className="flex space-x-2 bg-[#120F0D] p-1.5 rounded-2xl border border-[#382E24]">

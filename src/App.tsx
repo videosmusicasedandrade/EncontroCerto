@@ -12,6 +12,9 @@ import { AdminView } from './components/AdminView';
 import { SettingsView } from './components/SettingsView';
 import { MineiridadeCard } from './components/MineiridadeCard';
 import { LeaderboardView } from './components/LeaderboardView';
+import { AdSenseCompliance } from './components/AdSenseCompliance';
+import { CookieBanner } from './components/CookieBanner';
+import { Footer } from './components/Footer';
 import { UserProfile, CertcoinLote, Postagem, Match, Mensagem, Nota, Denuncia, NotificacaoPush } from './types';
 import { MOCK_USERS, INITIAL_POSTS, INITIAL_LOTES, INITIAL_MATCHES, INITIAL_MESSAGES } from './lib/store';
 import { getEstadoConfig } from './lib/estados';
@@ -79,6 +82,7 @@ export default function App() {
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [showCertcoinsModal, setShowCertcoinsModal] = useState<boolean>(false);
   const [showNotifsModal, setShowNotifsModal] = useState<boolean>(false);
+  const [complianceTab, setComplianceTab] = useState<'privacy' | 'terms' | 'about' | 'contact' | 'adsense' | null>(null);
 
   const handleSelectEstado = (sigla: string) => {
     setCurrentEstadoSigla(sigla);
@@ -555,6 +559,7 @@ export default function App() {
             onSelectEstado={handleSelectEstado}
             onUpdateSettings={(updates) => setCurrentUser({ ...currentUser, ...updates })}
             onOpenProfileEdit={() => setShowAuthModal(true)}
+            onOpenCompliance={(tab) => setComplianceTab(tab)}
           />
         )}
 
@@ -584,7 +589,30 @@ export default function App() {
         )}
       </main>
 
+      {/* Footer & Cookie Consent */}
+      <Footer
+        estadoConfig={estadoConfig}
+        onOpenCompliance={(tab) => setComplianceTab(tab)}
+      />
+
+      <CookieBanner
+        estadoConfig={estadoConfig}
+        onOpenPrivacy={() => setComplianceTab('privacy')}
+      />
+
       {/* Modals */}
+      {complianceTab && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md overflow-y-auto p-4 flex items-center justify-center">
+          <div className="w-full max-w-4xl my-8">
+            <AdSenseCompliance
+              estadoConfig={estadoConfig}
+              initialTab={complianceTab}
+              onClose={() => setComplianceTab(null)}
+            />
+          </div>
+        </div>
+      )}
+
       {showAuthModal && (
         <AuthModal
           estadoConfig={estadoConfig}
