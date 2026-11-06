@@ -17,11 +17,11 @@ declare global {
 }
 
 export function AdSenseUnit({ slotId = '1234567890', pubId, format = 'auto', estadoConfig, label = 'Espaço Patrocinado' }: AdSenseUnitProps) {
-  const activePubId = pubId || localStorage.getItem('encontro_certo_adsense_pubid') || 'ca-pub-0000000000000000';
+  const activePubId = pubId || localStorage.getItem('encontro_certo_adsense_pubid') || 'ca-pub-1204327016318163';
 
   useEffect(() => {
     try {
-      if (typeof window !== 'undefined' && activePubId && activePubId !== 'ca-pub-0000000000000000') {
+      if (typeof window !== 'undefined' && activePubId) {
         (window.adsbygoogle = window.adsbygoogle || []).push({});
       }
     } catch (err) {
@@ -29,7 +29,7 @@ export function AdSenseUnit({ slotId = '1234567890', pubId, format = 'auto', est
     }
   }, [activePubId, slotId]);
 
-  const isConfigured = activePubId && activePubId !== 'ca-pub-0000000000000000';
+  const isConfigured = Boolean(activePubId);
 
   return (
     <div className="w-full my-4 rounded-2xl bg-[#1E1915] border border-[#382E24] p-3 text-center overflow-hidden shadow-md">

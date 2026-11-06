@@ -1,3 +1,2 @@
 # Google AdSense Publisher File - Encontro Certo Brasil
-# Substitua pub-0000000000000000 pelo seu ID real do Google AdSense
-google.com, pub-0000000000000000, DIRECT, f08c47fec0942fa0
+google.com, pub-1204327016318163, DIRECT, f08c47fec0942fa0

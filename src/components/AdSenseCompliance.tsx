@@ -10,7 +10,7 @@ interface AdSenseComplianceProps {
 
 export function AdSenseCompliance({ estadoConfig, initialTab = 'privacy', onClose }: AdSenseComplianceProps) {
   const [activeTab, setActiveTab] = useState<'privacy' | 'terms' | 'about' | 'contact' | 'adsense'>(initialTab);
-  const [pubId, setPubId] = useState<string>(() => localStorage.getItem('encontro_certo_adsense_pubid') || '');
+  const [pubId, setPubId] = useState<string>(() => localStorage.getItem('encontro_certo_adsense_pubid') || 'ca-pub-1204327016318163');
   const [copiedScript, setCopiedScript] = useState<boolean>(false);
   const [copiedAdsTxt, setCopiedAdsTxt] = useState<boolean>(false);
   const [contactSuccess, setContactSuccess] = useState<boolean>(false);
