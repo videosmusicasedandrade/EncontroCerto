@@ -1,22 +1,31 @@
 import React, { useState } from 'react';
 import { Heart, X, Sparkles, MapPin, Sliders, ShieldCheck, Star, Coins } from 'lucide-react';
-import { UserProfile, CertcoinLote } from '../types';
+import { UserProfile, CertcoinLote, Postagem, Match, EstadoConfig } from '../types';
 import { calcularDistancia } from '../lib/supabase';
+import { MineiridadeCard } from './MineiridadeCard';
 
 interface DiscoverViewProps {
   currentUser: UserProfile;
+  estadoConfig: EstadoConfig;
+  onSelectEstado: (sigla: string) => void;
   usuarios: UserProfile[];
   lotes: CertcoinLote[];
   matches: string[];
+  allPosts?: Postagem[];
+  allMatches?: Match[];
   onUpdateRaio: (novoRaio: number) => void;
   onSendLike: (alvoId: string, superCerto: boolean) => void;
 }
 
 export const DiscoverView: React.FC<DiscoverViewProps> = ({
   currentUser,
+  estadoConfig,
+  onSelectEstado,
   usuarios,
   lotes,
   matches,
+  allPosts = [],
+  allMatches = [],
   onUpdateRaio,
   onSendLike,
 }) => {
@@ -48,7 +57,7 @@ export const DiscoverView: React.FC<DiscoverViewProps> = ({
 
   const handleSuperCertoClick = (u: UserProfile) => {
     if (totalCertcoins < 3) {
-      alert('Eita, o Super Certo custa 3 Certcoins! Jogue um pouquinho para ganhar mais 💛');
+      alert(`Eita, o Super Certo custa 3 Certcoins! Jogue um pouquinho para ganhar mais ${estadoConfig.emblem}`);
       return;
     }
     setShowSuperCertoConfirm(u);
@@ -63,23 +72,24 @@ export const DiscoverView: React.FC<DiscoverViewProps> = ({
   return (
     <div className="max-w-4xl mx-auto py-6 px-4 space-y-6">
       {/* Radius Filter Header */}
-      <div className="bg-white dark:bg-zinc-900 rounded-3xl p-5 shadow-sm border border-orange-100 dark:border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div className="bg-[#1E1915] rounded-3xl p-5 shadow-md border border-[#382E24] flex flex-col sm:flex-row items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-black text-zinc-800 dark:text-zinc-100 flex items-center space-x-2">
-            <MapPin className="w-5 h-5 text-orange-500" />
-            <span>Descobrir Mineiros(as) Próximos</span>
+          <h2 className="text-xl font-black text-[#F5E9D3] flex items-center space-x-2">
+            <MapPin className="w-5 h-5" style={{ color: estadoConfig.cor }} />
+            <span>Descobrir Gente Próxima em {estadoConfig.nome} {estadoConfig.emblem}</span>
           </h2>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-            Sistema de Distância Mútua: só aparece quem está no teu raio e vice-versa.
+          <p className="text-xs text-[#C8B8A0] mt-0.5">
+            Mostrando pessoas a até {currentUser.raio_busca} km de você 📍 (Distância Mútua)
           </p>
         </div>
 
         <div className="flex items-center space-x-3 w-full sm:w-auto">
-          <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300">Raio:</span>
+          <span className="text-xs font-bold text-[#C8B8A0]">Raio:</span>
           <select
             value={currentUser.raio_busca}
             onChange={(e) => onUpdateRaio(parseInt(e.target.value))}
-            className="px-4 py-2 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100 text-xs font-bold"
+            className="px-4 py-2 rounded-xl border border-[#382E24] bg-[#120F0D] text-[#F5E9D3] text-xs font-bold focus:outline-none"
+            style={{ borderColor: estadoConfig.cor }}
           >
             <option value={5}>5 km</option>
             <option value={10}>10 km</option>
@@ -93,13 +103,13 @@ export const DiscoverView: React.FC<DiscoverViewProps> = ({
       {/* Grid of Profiles */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
         {candidatos.length === 0 ? (
-          <div className="col-span-full text-center py-16 bg-white dark:bg-zinc-900 rounded-3xl border border-orange-100 dark:border-zinc-800 p-8">
-            <Sparkles className="w-12 h-12 mx-auto mb-3 text-orange-400 animate-spin-slow" />
-            <h3 className="font-bold text-lg text-zinc-800 dark:text-zinc-100 mb-1">
-              Nenhum(a) mineiro(a) encontrado(a) no raio atual
+          <div className="col-span-full text-center py-16 bg-[#1E1915] rounded-3xl border border-[#382E24] p-8 space-y-2">
+            <Sparkles className="w-12 h-12 mx-auto mb-3 animate-spin-slow" style={{ color: estadoConfig.cor }} />
+            <h3 className="font-bold text-lg text-[#F5E9D3]">
+              {estadoConfig.semResultados}
             </h3>
-            <p className="text-xs text-zinc-500">
-              Tente aumentar teu raio de busca nas configurações para ver mais gente boa!
+            <p className="text-xs text-[#C8B8A0] max-w-md mx-auto">
+              Tenta aumentar teu raio de busca para encontrar mais gente boa por perto em {estadoConfig.sigla}!
             </p>
           </div>
         ) : (
@@ -115,7 +125,7 @@ export const DiscoverView: React.FC<DiscoverViewProps> = ({
             return (
               <div
                 key={u.id}
-                className="bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden shadow-sm border border-orange-100 dark:border-zinc-800 flex flex-col group hover:shadow-md transition-shadow"
+                className="bg-[#1E1915] rounded-3xl overflow-hidden shadow-md border border-[#382E24] flex flex-col group hover:border-[#E8A838]/40 transition-all"
               >
                 <div
                   className="relative h-72 cursor-pointer overflow-hidden"
@@ -126,40 +136,45 @@ export const DiscoverView: React.FC<DiscoverViewProps> = ({
                     alt={u.nome}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-end p-4 text-white">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <span className="px-2.5 py-0.5 rounded-full bg-orange-500/80 backdrop-blur-xs text-[11px] font-bold">
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#120F0D]/90 via-[#120F0D]/30 to-transparent flex flex-col justify-end p-4 text-[#F5E9D3]">
+                    <div className="flex items-center space-x-2 mb-1.5 flex-wrap gap-y-1">
+                      <span className="px-2.5 py-0.5 rounded-full bg-[#E8A838]/90 text-[#120F0D] text-[11px] font-black">
                         Aprox. {dist}km
                       </span>
                       {isMatch && (
-                        <span className="px-2.5 py-0.5 rounded-full bg-pink-500/80 backdrop-blur-xs text-[11px] font-bold">
+                        <span className="px-2.5 py-0.5 rounded-full bg-[#D1704A] text-[#F5E9D3] text-[11px] font-black">
                           Match 💛
                         </span>
                       )}
+                      <MineiridadeCard
+                        postsCount={allPosts.filter((p) => p.autor_id === u.id).length}
+                        matchesCount={allMatches.filter((m) => m.usuario1_id === u.id || m.usuario2_id === u.id).length}
+                        compact={true}
+                      />
                     </div>
-                    <h3 className="text-xl font-black">
+                    <h3 className="text-xl font-black text-[#F5E9D3]">
                       {u.nome}, {u.idade}
                     </h3>
-                    <p className="text-xs text-zinc-200">
+                    <p className="text-xs text-[#C8B8A0]">
                       {u.cidade} {u.bairro ? `• ${u.bairro}` : ''}
                     </p>
                   </div>
                 </div>
 
-                <div className="p-4 flex items-center justify-between gap-2 mt-auto">
+                <div className="p-4 flex items-center justify-between gap-2 mt-auto bg-[#1E1915]">
                   <button
                     onClick={() => onSendLike(u.id, false)}
-                    className="flex-1 py-2.5 rounded-xl bg-orange-50 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400 font-bold text-xs hover:bg-orange-100 transition-colors flex items-center justify-center space-x-1"
+                    className="flex-1 py-2.5 rounded-xl bg-[#2A231D] text-[#E8A838] font-bold text-xs hover:bg-[#382E24] transition-colors flex items-center justify-center space-x-1 border border-[#E8A838]/30"
                   >
-                    <Heart className="w-4 h-4 fill-orange-500 text-orange-500" />
+                    <Heart className="w-4 h-4 fill-[#E8A838] text-[#E8A838]" />
                     <span>Curtir (+0.50 🪙)</span>
                   </button>
                   <button
                     onClick={() => handleSuperCertoClick(u)}
-                    className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 text-white font-bold text-xs hover:opacity-95 shadow transition-all flex items-center space-x-1"
+                    className="px-3.5 py-2.5 rounded-xl golden-button text-xs shadow transition-all flex items-center space-x-1"
                     title="Super Certo (3 Certcoins)"
                   >
-                    <Star className="w-4 h-4 fill-white" />
+                    <Star className="w-4 h-4 fill-[#120F0D]" />
                     <span>Super (3 🪙)</span>
                   </button>
                 </div>
@@ -209,6 +224,14 @@ export const DiscoverView: React.FC<DiscoverViewProps> = ({
                 <p className="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">
                   {selectedUser.descricao || 'Nenhuma descrição informada.'}
                 </p>
+              </div>
+
+              {/* Nível de Mineiridade */}
+              <div className="pt-2">
+                <MineiridadeCard
+                  postsCount={allPosts.filter((p) => p.autor_id === selectedUser.id).length}
+                  matchesCount={allMatches.filter((m) => m.usuario1_id === selectedUser.id || m.usuario2_id === selectedUser.id).length}
+                />
               </div>
 
               <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 flex space-x-3">

@@ -10,49 +10,66 @@ import { MatchesView } from './components/MatchesView';
 import { GamesView } from './components/GamesView';
 import { AdminView } from './components/AdminView';
 import { SettingsView } from './components/SettingsView';
+import { MineiridadeCard } from './components/MineiridadeCard';
+import { LeaderboardView } from './components/LeaderboardView';
 import { UserProfile, CertcoinLote, Postagem, Match, Mensagem, Nota, Denuncia, NotificacaoPush } from './types';
 import { MOCK_USERS, INITIAL_POSTS, INITIAL_LOTES, INITIAL_MATCHES, INITIAL_MESSAGES } from './lib/store';
-import { mineiroNLP } from './lib/mineiroNLP';
+import { getEstadoConfig } from './lib/estados';
+
+function safeGetJSON<T>(key: string, fallback: T): T {
+  try {
+    const item = localStorage.getItem(key);
+    if (!item || item === 'undefined' || item === 'null') return fallback;
+    const parsed = JSON.parse(item);
+    return parsed !== null && parsed !== undefined ? parsed : fallback;
+  } catch (err) {
+    console.warn(`Erro ao carregar ${key} do localStorage:`, err);
+    return fallback;
+  }
+}
 
 export default function App() {
-  const [usuarios, setUsuarios] = useState<UserProfile[]>(() => {
-    const saved = localStorage.getItem('encontro_certo_usuarios');
-    return saved ? JSON.parse(saved) : MOCK_USERS;
-  });
+  const [currentEstadoSigla, setCurrentEstadoSigla] = useState<string>(() =>
+    safeGetJSON('encontro_certo_estado', 'MG')
+  );
 
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
-    const saved = localStorage.getItem('encontro_certo_current_user');
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [usuarios, setUsuarios] = useState<UserProfile[]>(() =>
+    safeGetJSON('encontro_certo_usuarios', MOCK_USERS)
+  );
 
-  const [lotes, setLotes] = useState<CertcoinLote[]>(() => {
-    const saved = localStorage.getItem('encontro_certo_lotes');
-    return saved ? JSON.parse(saved) : INITIAL_LOTES;
-  });
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() =>
+    safeGetJSON('encontro_certo_current_user', null)
+  );
 
-  const [posts, setPosts] = useState<Postagem[]>(() => {
-    const saved = localStorage.getItem('encontro_certo_posts');
-    return saved ? JSON.parse(saved) : INITIAL_POSTS;
-  });
+  const [lotes, setLotes] = useState<CertcoinLote[]>(() =>
+    safeGetJSON('encontro_certo_lotes', INITIAL_LOTES)
+  );
+
+  const [posts, setPosts] = useState<Postagem[]>(() =>
+    safeGetJSON('encontro_certo_posts', INITIAL_POSTS)
+  );
 
   const [matches, setMatches] = useState<Match[]>(() => {
-    const saved = localStorage.getItem('encontro_certo_matches');
-    return saved ? JSON.parse(saved) : INITIAL_MATCHES;
+    const list = safeGetJSON<Match[]>('encontro_certo_matches', INITIAL_MATCHES);
+    return Array.isArray(list) && list.length >= 2 ? list : INITIAL_MATCHES;
   });
 
   const [mensagens, setMensagens] = useState<Mensagem[]>(() => {
-    const saved = localStorage.getItem('encontro_certo_mensagens');
-    return saved ? JSON.parse(saved) : INITIAL_MESSAGES;
+    const list = safeGetJSON<Mensagem[]>('encontro_certo_mensagens', INITIAL_MESSAGES);
+    return Array.isArray(list) && list.length >= 5 ? list : INITIAL_MESSAGES;
   });
 
   const [notas, setNotas] = useState<Nota[]>([]);
   const [denuncias, setDenuncias] = useState<Denuncia[]>([]);
   const [readReceipts, setReadReceipts] = useState<string[]>([]);
+
+  const estadoConfig = getEstadoConfig(currentEstadoSigla);
+
   const [notificacoes, setNotificacoes] = useState<NotificacaoPush[]>([
     {
       id: 'notif-1',
       titulo: 'Boas-vindas!',
-      mensagem: mineiroNLP.welcomeBack('Mineiro(a)'),
+      mensagem: estadoConfig.aoEntrar,
       lida: false,
       criado_em: new Date().toISOString(),
     },
@@ -62,6 +79,16 @@ export default function App() {
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [showCertcoinsModal, setShowCertcoinsModal] = useState<boolean>(false);
   const [showNotifsModal, setShowNotifsModal] = useState<boolean>(false);
+
+  const handleSelectEstado = (sigla: string) => {
+    setCurrentEstadoSigla(sigla);
+    localStorage.setItem('encontro_certo_estado', JSON.stringify(sigla));
+    if (currentUser) {
+      const updated = { ...currentUser, estado_sigla: sigla };
+      setCurrentUser(updated);
+      setUsuarios((prev) => prev.map((u) => (u.id === currentUser.id ? updated : u)));
+    }
+  };
 
   // Sync to localStorage
   useEffect(() => {
@@ -78,30 +105,34 @@ export default function App() {
   // Handle Login with eddornelas02@gmail.com / Edinho55@
   const handleLogin = (email: string) => {
     // Procura usuário admin ou cria um associado
-    let adminUser = usuarios.find((u) => u.isAdmin);
-    if (!adminUser) {
-      adminUser = {
-        id: 'user-admin-ornelas',
-        nome: 'Edd Ornelas (Admin)',
-        nascimento: '1995-04-10',
-        idade: 31,
-        cidade: 'Belo Horizonte',
-        bairro: 'Savassi',
-        latitude: -19.932,
-        longitude: -43.938,
-        raio_busca: 50,
-        altura: 1.80,
-        tipo_corporal: 'Normal',
-        foto: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=600&q=80',
-        descricao: 'Criador do Encontro Certo MG. Um uai bem grande pra todos! Curto um pão de queijo com café.',
-        tipo_perfil: 'publico',
-        exibir_na_busca: true,
-        criado_em: new Date().toISOString(),
-        isAdmin: true,
-      };
-      setUsuarios((prev) => [adminUser!, ...prev]);
+    const existingAdmin = usuarios.find((u) => u.isAdmin);
+    if (existingAdmin) {
+      setCurrentUser(existingAdmin);
+      return;
     }
-    setCurrentUser(adminUser);
+
+    const newAdmin: UserProfile = {
+      id: 'user-admin-ornelas',
+      nome: 'Edd Ornelas (Admin)',
+      nascimento: '1995-04-10',
+      idade: 31,
+      cidade: 'Belo Horizonte',
+      bairro: 'Savassi',
+      estado_sigla: currentEstadoSigla || 'MG',
+      latitude: -19.932,
+      longitude: -43.938,
+      raio_busca: 50,
+      altura: 1.80,
+      tipo_corporal: 'Normal',
+      foto: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=600&q=80',
+      descricao: 'Criador do Encontro Certo Brasil. Um abraço especial pra todos!',
+      tipo_perfil: 'publico',
+      exibir_na_busca: true,
+      criado_em: new Date().toISOString(),
+      isAdmin: true,
+    };
+    setUsuarios((prev) => [newAdmin, ...prev]);
+    setCurrentUser(newAdmin);
   };
 
   const handleRegister = (profileData: Omit<UserProfile, 'id' | 'idade' | 'criado_em'>) => {
@@ -248,7 +279,7 @@ export default function App() {
         {
           id: 'notif-' + Date.now(),
           titulo: 'Novo Match! 💛',
-          mensagem: mineiroNLP.match(outro.nome),
+          mensagem: `Deu Match com ${outro.nome}! ${estadoConfig.match}`,
           lida: false,
           criado_em: new Date().toISOString(),
         },
@@ -261,7 +292,8 @@ export default function App() {
     destinatarioId: string,
     conteudo: string,
     tipo: 'texto' | 'foto' | 'audio' | 'presente' = 'texto',
-    destacada: boolean = false
+    destacada: boolean = false,
+    extraData?: { imagem_url?: string; audio_duracao?: number; qtd_presente?: number }
   ) => {
     if (destacada && !deductCertcoins(4)) return;
 
@@ -273,8 +305,88 @@ export default function App() {
       tipo,
       destacada,
       criado_em: new Date().toISOString(),
+      ...extraData,
     };
     setMensagens((prev) => [...prev, novaMsg]);
+
+    // Resposta automática acolhedora de Minas Gerais após 1.5s para enriquecer o histórico da conversa
+    const outro = usuarios.find((u) => u.id === destinatarioId);
+    if (outro) {
+      const mineiroReplies: Record<string, string[]> = {
+        'user-1': [
+          'Trem bão demais sô! Adorei bater esse papo contigo 💛',
+          'Pois é! Nada como um café mineiro pra alegrar a tarde.',
+          'Uai, concordo plenamente com você! Quando cê vier a Ouro Preto me avisa!',
+          'Que coisa boa! Vamos marcar aquele pão de queijo na praça sim!',
+          'Hahaha bom demais da conta! Você é muito simpático(a).'
+        ],
+        'user-2': [
+          'É isso aí meu parceiro! Aqui em Contagem o carteado e a viola comem solto!',
+          'Opa, falou e disse! Trem bão demais!',
+          'Com certeza sô! Tamo junto nessa prosa boa.',
+          'Bora sim! Vou afinar a viola pro fim de semana.'
+        ],
+        'user-3': [
+          'Que gracinha! Adorei sua mensagem 💛',
+          'Uberlândia tá de portas abertas quando você vier!',
+          'Nossa, concordo 100%! Conversar com gente de Minas é outro nível.'
+        ]
+      };
+
+      const replies = mineiroReplies[destinatarioId] || [
+        'Uai, bom demais prosear com você!',
+        'Trem bão! Um abraço bem apertado de Minas pra você 💛',
+        'Com certeza! Essa prosa tá boa demais da conta.'
+      ];
+
+      const randomReply = replies[Math.floor(Math.random() * replies.length)];
+
+      setTimeout(() => {
+        const respostaMsg: Mensagem = {
+          id: 'msg-reply-' + Date.now(),
+          remetente_id: destinatarioId,
+          destinatario_id: currentUser!.id,
+          conteudo: randomReply,
+          tipo: 'texto',
+          criado_em: new Date().toISOString(),
+        };
+        setMensagens((prev) => [...prev, respostaMsg]);
+
+        setNotificacoes((prev) => [
+          {
+            id: 'notif-' + Date.now(),
+            titulo: `${outro.nome} mandou prosa! 💌`,
+            mensagem: randomReply,
+            lida: false,
+            criado_em: new Date().toISOString(),
+          },
+          ...prev,
+        ]);
+      }, 1600);
+    }
+  };
+
+  const handleResetDemoHistory = () => {
+    setMensagens(INITIAL_MESSAGES);
+    setMatches(INITIAL_MATCHES);
+    localStorage.setItem('encontro_certo_mensagens', JSON.stringify(INITIAL_MESSAGES));
+    localStorage.setItem('encontro_certo_matches', JSON.stringify(INITIAL_MATCHES));
+    alert('Histórico de conversas dos últimos 3 dias restaurado com sucesso! 💛');
+  };
+
+  const handleClearChatHistory = (alvoId: string) => {
+    if (!currentUser) return;
+    if (confirm('Tem certeza que deseja limpar todo o histórico desta conversa?')) {
+      setMensagens((prev) =>
+        prev.filter(
+          (m) =>
+            !(
+              (m.remetente_id === currentUser.id && m.destinatario_id === alvoId) ||
+              (m.remetente_id === alvoId && m.destinatario_id === currentUser.id)
+            )
+        )
+      );
+    }
   };
 
   const handleUnlockReadReceipt = (alvoId: string) => {
@@ -298,7 +410,7 @@ export default function App() {
       {
         id: 'notif-' + Date.now(),
         titulo: 'Carinho recebido! 💛',
-        mensagem: mineiroNLP.novoPresente(qtd),
+        mensagem: `Olha só! Você recebeu um carinho de ${qtd} Certcoins ${estadoConfig.emblem}`,
         lida: false,
         criado_em: new Date().toISOString(),
       },
@@ -321,7 +433,14 @@ export default function App() {
 
   // Se não estiver logado, mostra a tela de Login / Cadastro
   if (!currentUser) {
-    return <LoginScreen onLogin={handleLogin} onRegister={handleRegister} />;
+    return (
+      <LoginScreen
+        estadoConfig={estadoConfig}
+        onSelectEstado={handleSelectEstado}
+        onLogin={handleLogin}
+        onRegister={handleRegister}
+      />
+    );
   }
 
   const currentUserLotes = lotes.filter((l) => l.usuario_id === currentUser.id);
@@ -330,9 +449,11 @@ export default function App() {
     .map((m) => (m.usuario1_id === currentUser.id ? m.usuario2_id : m.usuario1_id));
 
   return (
-    <div className="min-h-screen bg-orange-50/30 dark:bg-zinc-950 text-zinc-800 dark:text-zinc-100 font-sans pb-16 md:pb-0">
+    <div className="min-h-screen bg-[#120F0D] text-[#F5E9D3] font-sans pb-20 md:pb-0">
       <Navbar
         currentUser={currentUser}
+        estadoConfig={estadoConfig}
+        onSelectEstado={handleSelectEstado}
         lotes={currentUserLotes}
         notificacoes={notificacoes}
         activeTab={activeTab}
@@ -346,6 +467,8 @@ export default function App() {
         {activeTab === 'feed' && (
           <FeedView
             currentUser={currentUser}
+            estadoConfig={estadoConfig}
+            onSelectEstado={handleSelectEstado}
             posts={posts}
             usuarios={usuarios}
             lotes={currentUserLotes}
@@ -361,9 +484,13 @@ export default function App() {
         {activeTab === 'discover' && (
           <DiscoverView
             currentUser={currentUser}
+            estadoConfig={estadoConfig}
+            onSelectEstado={handleSelectEstado}
             usuarios={usuarios}
             lotes={currentUserLotes}
             matches={currentMatchIds}
+            allPosts={posts}
+            allMatches={matches}
             onUpdateRaio={(novoRaio) => setCurrentUser({ ...currentUser, raio_busca: novoRaio })}
             onSendLike={handleSendLike}
           />
@@ -372,6 +499,7 @@ export default function App() {
         {activeTab === 'matches' && (
           <MatchesView
             currentUser={currentUser}
+            estadoConfig={estadoConfig}
             matches={matches.filter(
               (m) => m.usuario1_id === currentUser.id || m.usuario2_id === currentUser.id
             ).map((m) => ({
@@ -384,11 +512,26 @@ export default function App() {
             onSendMessage={handleSendMessage}
             onUnlockReadReceipt={handleUnlockReadReceipt}
             onSendGift={handleSendGift}
+            onClearChatHistory={handleClearChatHistory}
+            onResetDemoHistory={handleResetDemoHistory}
           />
         )}
 
         {activeTab === 'games' && (
-          <GamesView currentUser={currentUser} onAddCertcoins={addCertcoins} />
+          <GamesView
+            currentUser={currentUser}
+            estadoConfig={estadoConfig}
+            onAddCertcoins={addCertcoins}
+          />
+        )}
+
+        {activeTab === 'leaderboard' && (
+          <LeaderboardView
+            usuarios={usuarios}
+            posts={posts}
+            matches={matches}
+            currentUser={currentUser}
+          />
         )}
 
         {activeTab === 'admin' && currentUser?.isAdmin && (
@@ -408,29 +551,35 @@ export default function App() {
         {activeTab === 'settings' && (
           <SettingsView
             currentUser={currentUser}
+            estadoConfig={estadoConfig}
+            onSelectEstado={handleSelectEstado}
             onUpdateSettings={(updates) => setCurrentUser({ ...currentUser, ...updates })}
             onOpenProfileEdit={() => setShowAuthModal(true)}
           />
         )}
 
         {activeTab === 'profile' && (
-          <div className="max-w-xl mx-auto py-8 px-4">
-            <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 shadow-sm border border-orange-100 dark:border-zinc-800 text-center space-y-4">
-              <img src={currentUser.foto} alt={currentUser.nome} className="w-28 h-28 rounded-full object-cover mx-auto border-4 border-orange-400 shadow-md" />
+          <div className="max-w-xl mx-auto py-8 px-4 space-y-6">
+            <div className="bg-[#1E1915] rounded-3xl p-6 shadow-lg border border-[#382E24] text-center space-y-4">
+              <img src={currentUser.foto} alt={currentUser.nome} className="w-28 h-28 rounded-full object-cover mx-auto border-4 shadow-md" style={{ borderColor: estadoConfig.cor }} />
               <div>
-                <h2 className="text-2xl font-black">{currentUser.nome}, {currentUser.idade}</h2>
-                <p className="text-xs text-zinc-500">{currentUser.cidade} {currentUser.bairro ? `• ${currentUser.bairro}` : ''}</p>
+                <h2 className="text-2xl font-black text-[#F5E9D3]">{currentUser.nome}, {currentUser.idade}</h2>
+                <p className="text-xs text-[#C8B8A0]">{currentUser.cidade} ({estadoConfig.sigla}) {currentUser.bairro ? `• ${currentUser.bairro}` : ''}</p>
               </div>
-              <p className="text-sm text-zinc-700 dark:text-zinc-300 bg-orange-50/50 dark:bg-zinc-800/50 p-4 rounded-2xl">
+              <p className="text-sm text-[#F5E9D3] bg-[#2A231D] p-4 rounded-2xl border border-[#382E24]">
                 {currentUser.descricao}
               </p>
               <button
                 onClick={() => setShowAuthModal(true)}
-                className="w-full py-3 bg-orange-500 text-white font-extrabold rounded-xl shadow text-sm"
+                className="w-full py-3 golden-button rounded-xl text-sm"
               >
-                Editar Meu Perfil 💛
+                Editar Meu Perfil {estadoConfig.emblem}
               </button>
             </div>
+            <MineiridadeCard
+              postsCount={posts.filter((p) => p.autor_id === currentUser.id).length}
+              matchesCount={matches.filter((m) => m.usuario1_id === currentUser.id || m.usuario2_id === currentUser.id).length}
+            />
           </div>
         )}
       </main>
@@ -438,12 +587,15 @@ export default function App() {
       {/* Modals */}
       {showAuthModal && (
         <AuthModal
+          estadoConfig={estadoConfig}
+          onSelectEstado={handleSelectEstado}
           onCompleteProfile={(profileData) => {
             setCurrentUser({ ...currentUser, ...profileData });
             setUsuarios((prev) => prev.map((u) => (u.id === currentUser.id ? { ...currentUser, ...profileData } : u)));
             setShowAuthModal(false);
           }}
           initialData={currentUser}
+          onClose={() => setShowAuthModal(false)}
         />
       )}
 

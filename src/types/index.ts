@@ -1,3 +1,18 @@
+export interface EstadoConfig {
+  sigla: string;
+  nome: string;
+  regiao: 'Sudeste' | 'Nordeste' | 'Sul' | 'Norte' | 'Centro-Oeste';
+  cor: string; // Cor complementar em hex (ex: #E8A838)
+  emblem: string; // Emoji representativo
+  saudacao: string;
+  apresentacao: string;
+  aoEntrar: string;
+  match: string;
+  semResultados: string;
+  despedida: string;
+  emojisGame: string[];
+}
+
 export interface UserProfile {
   id: string;
   nome: string;
@@ -5,6 +20,7 @@ export interface UserProfile {
   idade: number;
   cidade: string;
   bairro?: string;
+  estado_sigla: string; // Ex: 'MG', 'RJ', 'SP', etc.
   latitude: number;
   longitude: number;
   raio_busca: number; // 5, 10, 25, 50, 100
@@ -62,6 +78,9 @@ export interface Mensagem {
   lido_em?: string;
   destacada?: boolean;
   criado_em: string;
+  imagem_url?: string;
+  audio_duracao?: number; // em segundos
+  qtd_presente?: number; // em Certcoins
 }
 
 export interface SolicitacaoSeguir {

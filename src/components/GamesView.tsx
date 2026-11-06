@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Gamepad2, Trophy, Coins, RotateCcw, Sparkles, Heart } from 'lucide-react';
-import { UserProfile } from '../types';
+import { UserProfile, EstadoConfig } from '../types';
 
 interface GamesViewProps {
   currentUser: UserProfile;
+  estadoConfig: EstadoConfig;
   onAddCertcoins: (quantidade: number) => void;
 }
 
-export const GamesView: React.FC<GamesViewProps> = ({ currentUser, onAddCertcoins }) => {
+export const GamesView: React.FC<GamesViewProps> = ({ currentUser, estadoConfig, onAddCertcoins }) => {
   const [activeGame, setActiveGame] = useState<'menu' | 'agario' | 'memory'>('menu');
 
   // --- AGAR.IO STATE ---
@@ -22,9 +23,11 @@ export const GamesView: React.FC<GamesViewProps> = ({ currentUser, onAddCertcoin
   const [memoryPhase, setMemoryPhase] = useState(1);
   const [memoryWon, setMemoryWon] = useState(false);
 
-  // Initialize Memory Game
+  // Initialize Memory Game with State Emojis
   const startMemoryGame = () => {
-    const symbols = ['🧀', '☕', '⛪', '🎸', ' pão ', '💛'];
+    const symbols = estadoConfig.emojisGame && estadoConfig.emojisGame.length >= 6
+      ? estadoConfig.emojisGame
+      : ['🧀', '☕', '⛪', '🎸', '🏖️', estadoConfig.emblem];
     const deck = [...symbols, ...symbols]
       .sort(() => Math.random() - 0.5)
       .map((symbol, index) => ({ id: index, symbol, flipped: false, matched: false }));

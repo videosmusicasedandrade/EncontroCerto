@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Coins, X, Send, Sparkles, AlertCircle } from 'lucide-react';
+import { Coins, X, Send, Sparkles, AlertCircle, Clock, Gem } from 'lucide-react';
 import { CertcoinLote, UserProfile } from '../types';
 
 interface CertcoinsModalProps {
@@ -36,76 +36,87 @@ export const CertcoinsModal: React.FC<CertcoinsModalProps> = ({
       return;
     }
 
+    if (quantidade >= 3) {
+      const confirmSpend = window.confirm(
+        `Isso vai usar ${quantidade} Certcoins. Tem certeza que deseja enviar esse carinho?`
+      );
+      if (!confirmSpend) return;
+    }
+
     onTransfer(destinatarioId, quantidade);
-    setSuccessMsg(`Seu carinho de ${quantidade} Certcoins foi enviado com sucesso! 💛`);
+    setSuccessMsg(`Seu carinho de ${quantidade} Certcoins foi enviado com sucesso! Consumido do seu lote mais antigo 💛`);
     setTimeout(() => {
       setSuccessMsg('');
       setDestinatarioId('');
       setQuantidade(1);
-    }, 3000);
+    }, 4000);
   };
 
   const otherUsers = usuarios.filter((u) => u.id !== currentUserId);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-zinc-900 rounded-3xl max-w-md w-full p-6 shadow-2xl border border-amber-200 dark:border-zinc-800 relative">
+    <div className="fixed inset-0 z-50 bg-[#120F0D]/80 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+      <div className="bg-[#1E1915] rounded-3xl max-w-md w-full p-6 shadow-2xl border border-[#382E24] relative text-[#F5E9D3] space-y-5">
         <button
           onClick={onClose}
-          className="absolute top-5 right-5 p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500"
+          className="absolute top-5 right-5 p-2 rounded-full hover:bg-[#2A231D] text-[#C8B8A0] transition-colors"
         >
           <X className="w-5 h-5" />
         </button>
 
-        <div className="text-center mb-6">
-          <div className="w-16 h-16 bg-gradient-to-tr from-amber-400 to-yellow-500 rounded-3xl mx-auto flex items-center justify-center shadow-lg mb-3 animate-bounce">
-            <Coins className="w-9 h-9 text-white" />
+        <div className="text-center">
+          <div className="w-16 h-16 bg-gradient-to-tr from-[#E8A838] via-[#F0C040] to-[#D1704A] rounded-3xl mx-auto flex items-center justify-center shadow-lg mb-3 animate-heartbeat text-[#120F0D]">
+            <Coins className="w-9 h-9" />
           </div>
-          <h2 className="text-2xl font-black text-zinc-800 dark:text-zinc-100">
-            Meus Certcoins 💛
+          <h2 className="text-2xl font-black text-[#F5E9D3]">
+            Carteira de Certcoins 💛
           </h2>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+          <p className="text-xs text-[#C8B8A0] mt-1">
             A moeda oficial de Minas para espalhar carinho e prosa boa.
           </p>
         </div>
 
-        {/* Balance Card */}
-        <div className="bg-gradient-to-r from-amber-500 to-yellow-500 rounded-2xl p-4 text-white shadow-md mb-6">
-          <div className="grid grid-cols-2 gap-4 text-center">
-            <div className="border-r border-amber-400/50 pr-2">
-              <span className="block text-2xl font-black">{totalTemp}</span>
-              <span className="text-xs font-medium text-amber-100">Temporários (30d)</span>
-            </div>
-            <div>
-              <span className="block text-2xl font-black">{totalVitalicio}</span>
-              <span className="text-xs font-medium text-amber-100">Vitalícios 💎</span>
+        {/* Separated Balances Card */}
+        <div className="bg-[#2A231D] border border-[#382E24] rounded-2xl p-4 space-y-3 shadow-inner">
+          <div className="flex items-center space-x-3 p-2.5 rounded-xl bg-[#1E1915] border border-[#382E24]">
+            <Clock className="w-5 h-5 text-[#E8A838] shrink-0" />
+            <div className="text-xs font-bold text-[#F5E9D3]">
+              💛 Tens <strong className="text-[#E8A838] text-base">{totalTemp}</strong> Certcoins pra usar nos próximos 30 dias
             </div>
           </div>
-          <p className="text-[11px] text-amber-100/90 text-center mt-3 pt-2 border-t border-amber-400/40">
-            * O sistema consome primeiro os temporários que vencem mais cedo (FIFO).
+
+          <div className="flex items-center space-x-3 p-2.5 rounded-xl bg-[#1E1915] border border-[#382E24]">
+            <Gem className="w-5 h-5 text-teal-400 shrink-0" />
+            <div className="text-xs font-bold text-[#F5E9D3]">
+              💎 Tens <strong className="text-teal-400 text-base">{totalVitalicio}</strong> Certcoins que não vencem nunca
+            </div>
+          </div>
+
+          <p className="text-[11px] text-[#C8B8A0] text-center pt-1">
+            * O sistema consome primeiro os lotes temporários que vencem mais cedo (FIFO).
           </p>
         </div>
 
         {successMsg && (
-          <div className="mb-4 p-3 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-200 text-sm font-semibold rounded-2xl text-center">
+          <div className="p-3 bg-emerald-950/80 border border-emerald-700 text-emerald-200 text-xs font-bold rounded-2xl text-center">
             {successMsg}
           </div>
         )}
 
-        {/* Transfer form */}
+        {/* Transfer Form */}
         <form onSubmit={handleSend} className="space-y-4">
-          <h3 className="text-sm font-bold text-zinc-700 dark:text-zinc-300">
-            Enviar Certcoins para outro(a) mineiro(a)
+          <h3 className="text-xs font-black text-[#C8B8A0] uppercase">
+            Mandar carinho em Certcoins para alguém
           </h3>
           <div>
-            <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">
-              Escolher pessoa
+            <label className="block text-xs text-[#C8B8A0] mb-1 font-bold">
+              Escolher mineiro(a)
             </label>
             <select
               required
               value={destinatarioId}
               onChange={(e) => setDestinatarioId(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100 text-sm"
+              className="w-full px-4 py-2.5 rounded-xl border border-[#382E24] bg-[#120F0D] text-[#F5E9D3] text-xs font-bold focus:outline-none focus:border-[#E8A838]"
             >
               <option value="">Selecione...</option>
               {otherUsers.map((u) => (
@@ -117,8 +128,8 @@ export const CertcoinsModal: React.FC<CertcoinsModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">
-              Quantidade (mínimo 1)
+            <label className="block text-xs text-[#C8B8A0] mb-1 font-bold">
+              Quantidade de Certcoins
             </label>
             <input
               type="number"
@@ -127,16 +138,16 @@ export const CertcoinsModal: React.FC<CertcoinsModalProps> = ({
               required
               value={quantidade}
               onChange={(e) => setQuantidade(parseInt(e.target.value) || 1)}
-              className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100 text-sm"
+              className="w-full px-4 py-2.5 rounded-xl border border-[#382E24] bg-[#120F0D] text-[#F5E9D3] text-sm font-bold focus:outline-none focus:border-[#E8A838]"
             />
           </div>
 
           <button
             type="submit"
-            className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow transition-colors flex items-center justify-center space-x-2"
+            className="w-full py-3.5 golden-button rounded-2xl text-xs sm:text-sm shadow-md flex items-center justify-center space-x-2"
           >
-            <Send className="w-4 h-4" />
-            <span>Enviar Carinho 💛</span>
+            <Send className="w-4 h-4 text-[#120F0D]" />
+            <span>Mandar com carinho 💛</span>
           </button>
         </form>
       </div>
