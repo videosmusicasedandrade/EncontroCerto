@@ -624,6 +624,7 @@ export default function App() {
           <GamesView
             currentUser={currentUser}
             estadoConfig={estadoConfig}
+            usuarios={usuarios}
             onAddCertcoins={addCertcoins}
           />
         )}
