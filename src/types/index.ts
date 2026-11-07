@@ -47,6 +47,8 @@ export interface Postagem {
   id: string;
   autor_id: string;
   conteudo: string;
+  imagem_url?: string;
+  isDesafioDiario?: boolean;
   editado_em?: string;
   criado_em: string;
   autor?: UserProfile;

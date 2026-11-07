@@ -271,14 +271,77 @@ export default function App() {
     setLotes((prev) => [novoLote, ...prev]);
   };
 
-  const handleCreatePost = (conteudo: string) => {
+  // Notificação Automática do Desafio Diário (12:20 e 20:20 da noite)
+  useEffect(() => {
+    const checkSchedule = () => {
+      const now = new Date();
+      const hours = now.getHours();
+      const minutes = now.getMinutes();
+
+      if ((hours === 12 && minutes === 20) || (hours === 20 && minutes === 20)) {
+        setNotificacoes((prev) => {
+          const alreadyNotified = prev.some(
+            (n) => n.titulo.includes('Desafio 12:20') && 
+            new Date(n.criado_em).toDateString() === now.toDateString() &&
+            new Date(n.criado_em).getHours() === hours
+          );
+          if (alreadyNotified) return prev;
+          return [
+            {
+              id: 'notif-desafio-' + Date.now(),
+              titulo: '📸 Desafio 12:20 / 20:20 no Ar! (+3 🪙)',
+              mensagem: 'Hora de postar no Feed! Tire/envie uma foto e escreva o que você está fazendo agora para ganhar 3 Certcoins!',
+              lida: false,
+              criado_em: new Date().toISOString(),
+            },
+            ...prev,
+          ];
+        });
+      }
+    };
+
+    checkSchedule();
+    const interval = setInterval(checkSchedule, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleCreatePost = (conteudo: string, imagem_url?: string, isDesafioDiario?: boolean) => {
+    if (!currentUser) return;
+
+    if (isDesafioDiario) {
+      // Recompensa de +3 Certcoins por publicar a foto do momento no desafio das 12:20 / 20:20!
+      addCertcoins(3);
+      const newPost: Postagem = {
+        id: 'post-desafio-' + Date.now(),
+        autor_id: currentUser.id,
+        conteudo,
+        imagem_url,
+        isDesafioDiario: true,
+        criado_em: new Date().toISOString(),
+        autor: currentUser,
+      };
+      setPosts((prev) => [newPost, ...prev]);
+      setNotificacoes((prev) => [
+        {
+          id: 'notif-' + Date.now(),
+          titulo: 'Premiação de +3.00 Certcoins! 🏆',
+          mensagem: 'Parabéns! Você publicou a foto do momento no Desafio Diário (12:20 / 20:20) e garantiu sua recompensa de +3 Certcoins!',
+          lida: false,
+          criado_em: new Date().toISOString(),
+        },
+        ...prev,
+      ]);
+      return;
+    }
+
     if (!deductCertcoins(1)) return;
     const newPost: Postagem = {
       id: 'post-' + Date.now(),
-      autor_id: currentUser!.id,
+      autor_id: currentUser.id,
       conteudo,
+      imagem_url,
       criado_em: new Date().toISOString(),
-      autor: currentUser!,
+      autor: currentUser,
     };
     setPosts((prev) => [newPost, ...prev]);
   };
