@@ -125,8 +125,8 @@ class PnlAudioEngine {
       this.droneOscL.start();
       this.droneOscR.start();
 
-      // Relaxing & Addictive Solfeggio / Pentatonic chime sequence (216, 288, 324, 432, 528, 648 Hz)
-      const frequencies = [216, 288, 324, 432, 528, 648];
+      // Happy & Addictive C Major Pentatonic (Faster Tempo: 600ms)
+      const frequencies = [523.25, 587.33, 659.25, 783.99, 880.0];
       let noteIndex = 0;
 
       this.intervalId = setInterval(() => {
@@ -141,8 +141,8 @@ class PnlAudioEngine {
         osc.frequency.setValueAtTime(freq, now);
 
         noteGain.gain.setValueAtTime(0.001, now);
-        noteGain.gain.exponentialRampToValueAtTime(0.03, now + 0.12);
-        noteGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.8);
+        noteGain.gain.exponentialRampToValueAtTime(0.05, now + 0.05); // Faster attack
+        noteGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.6); // Shorter decay
 
         osc.connect(noteGain);
         if (this.masterGain) {
@@ -150,8 +150,8 @@ class PnlAudioEngine {
         }
 
         osc.start(now);
-        osc.stop(now + 1.9);
-      }, 1200);
+        osc.stop(now + 0.7);
+      }, 600);
 
       this.isPlaying = true;
     } catch (e) {
@@ -194,11 +194,12 @@ class PnlAudioEngine {
   }
 }
 
-export const GamesView: React.FC<GamesViewProps> = ({
+export const GamesView: React.FC<GamesViewProps & { activeTab: string }> = ({
   currentUser,
   estadoConfig,
   usuarios = [],
   onAddCertcoins,
+  activeTab,
 }) => {
   const [activeGame, setActiveGame] = useState<'menu' | 'agario' | 'memory'>('menu');
 
@@ -247,7 +248,16 @@ export const GamesView: React.FC<GamesViewProps> = ({
 
   // Gerencia ciclo de vida do áudio relaxante PNL
   useEffect(() => {
-    if (activeGame === 'agario' && isMusicPlaying) {
+    const handleVisibilityChange = () => {
+      if (document.hidden && pnlAudioRef.current) {
+        pnlAudioRef.current.stop();
+        setIsMusicPlaying(false);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    if (activeGame === 'agario' && activeTab === 'games' && isMusicPlaying) {
       if (!pnlAudioRef.current) {
         pnlAudioRef.current = new PnlAudioEngine();
       }
@@ -258,11 +268,12 @@ export const GamesView: React.FC<GamesViewProps> = ({
       }
     }
     return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (pnlAudioRef.current) {
         pnlAudioRef.current.stop();
       }
     };
-  }, [activeGame, isMusicPlaying]);
+  }, [activeGame, activeTab, isMusicPlaying]);
 
   // --- MEMORY GAME STATE ---
   const [memoryCards, setMemoryCards] = useState<{ id: number; symbol: string; flipped: boolean; matched: boolean }[]>([]);

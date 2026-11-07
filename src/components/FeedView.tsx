@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Heart, MessageSquare, Edit3, Trash2, Send, Sparkles, Coins, ThumbsUp, Circle, MapPin } from 'lucide-react';
 import { Postagem, UserProfile, CertcoinLote, Nota, EstadoConfig } from '../types';
 import { StateSelector } from './StateSelector';
+import { PnlDopamineWidget } from './PnlDopamineWidget';
 import { AdSenseUnit } from './AdSenseUnit';
 import { calcularDistancia } from '../lib/supabase';
 
@@ -78,6 +79,13 @@ export const FeedView: React.FC<FeedViewProps> = ({
 
   return (
     <div className="max-w-2xl mx-auto py-6 px-4 space-y-6">
+      {/* PNL Dopamine Widget */}
+      <PnlDopamineWidget
+        estadoConfig={estadoConfig}
+        onAddCertcoins={(amount) => onSendNote(currentUser.id, amount)}
+        userName={currentUser.nome}
+      />
+
       {/* State Selector Section */}
       <StateSelector
         currentEstadoSigla={estadoConfig.sigla}

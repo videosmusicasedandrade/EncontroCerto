@@ -626,6 +626,7 @@ export default function App() {
             estadoConfig={estadoConfig}
             usuarios={usuarios}
             onAddCertcoins={addCertcoins}
+            activeTab={activeTab}
           />
         )}
 
