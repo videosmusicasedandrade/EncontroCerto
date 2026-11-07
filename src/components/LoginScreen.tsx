@@ -130,21 +130,21 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           </div>
         )}
 
-        {/* State Selection Selector in Login Header */}
+        {/* State Badge in Login Header (Locked to Geolocation) */}
         <div className="flex items-center justify-between pb-2 border-b border-[#382E24]">
-          <span className="text-[11px] font-black text-[#C8B8A0] uppercase">Selecione seu Estado:</span>
-          <select
-            value={estadoConfig.sigla}
-            onChange={(e) => handleEstadoChange(e.target.value)}
+          <div className="flex items-center space-x-1.5">
+            <MapPin className="w-3.5 h-3.5" style={{ color: estadoConfig.cor }} />
+            <span className="text-[11px] font-black text-[#C8B8A0] uppercase">Sua Localização:</span>
+          </div>
+          <div
+            className="flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-black border bg-[#120F0D]"
             style={{ borderColor: estadoConfig.cor }}
-            className="bg-[#120F0D] text-[#F5E9D3] text-xs font-black px-3 py-1.5 rounded-xl border focus:outline-none"
+            title="Localização detectada automaticamente pelo seu GPS ou conexão"
           >
-            {ESTADOS_BRASIL.map((est) => (
-              <option key={est.sigla} value={est.sigla}>
-                {est.emblem} {est.nome} ({est.sigla})
-              </option>
-            ))}
-          </select>
+            <span>{estadoConfig.emblem}</span>
+            <span style={{ color: estadoConfig.cor }}>{estadoConfig.nome} ({estadoConfig.sigla})</span>
+            <Lock className="w-3 h-3 text-[#C8B8A0]/70" />
+          </div>
         </div>
 
         {/* Header Logo & Dynamic State Phrase */}
@@ -317,19 +317,33 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               </div>
             )}
 
-            {/* PASSO 2: Cidade e Altura */}
+            {/* PASSO 2: Localização e Cidade */}
             {registerStep === 2 && (
               <div className="space-y-4 animate-fadeIn">
+                <div className="p-3 bg-[#120F0D] rounded-2xl border border-[#382E24] flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] uppercase font-black text-[#C8B8A0] block">Estado Detectado (Fixo)</span>
+                    <span className="text-sm font-black text-[#F5E9D3] flex items-center space-x-1.5 mt-0.5">
+                      <span>{estadoConfig.emblem}</span>
+                      <span style={{ color: estadoConfig.cor }}>{estadoConfig.nome} ({estadoConfig.sigla})</span>
+                    </span>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-lg bg-[#2A231D] text-[10px] font-bold text-[#E8A838] border border-[#382E24] flex items-center space-x-1">
+                    <Lock className="w-3 h-3" />
+                    <span>Por Localização</span>
+                  </span>
+                </div>
+
                 <div>
                   <label className="block text-xs font-extrabold text-[#C8B8A0] uppercase mb-1">
-                    Cidade de Minas (MG)
+                    Sua Cidade em {estadoConfig.nome} ({estadoConfig.sigla})
                   </label>
                   <input
                     type="text"
                     required
                     value={cidade}
                     onChange={(e) => setCidade(e.target.value)}
-                    placeholder="Ex: Belo Horizonte, Ouro Preto, Tiradentes..."
+                    placeholder={`Ex: Sua cidade em ${estadoConfig.nome}...`}
                     className="w-full px-4 py-3 rounded-2xl border border-[#382E24] bg-[#120F0D] text-sm text-[#F5E9D3] focus:outline-none focus:border-[#E8A838]"
                   />
                 </div>

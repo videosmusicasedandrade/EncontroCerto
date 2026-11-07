@@ -43,7 +43,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <div className="p-4 rounded-2xl bg-[#2A231D] border border-[#382E24] flex items-center justify-between">
           <div>
             <h4 className="font-bold text-sm text-[#F5E9D3]">Meu Perfil</h4>
-            <p className="text-xs text-[#C8B8A0]">Alterar fotos, descrição, tipo de perfil e estado</p>
+            <p className="text-xs text-[#C8B8A0]">Alterar fotos, descrição e preferências (estado fixado por localização)</p>
           </div>
           <button
             onClick={onOpenProfileEdit}

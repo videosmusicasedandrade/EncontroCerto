@@ -27,8 +27,8 @@ export function AdSenseCompliance({ estadoConfig, initialTab = 'privacy', onClos
     setTimeout(() => setFn(false), 2000);
   };
 
-  const autoAdsSnippet = `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${pubId || 'ca-pub-0000000000000000'}" crossorigin="anonymous"></script>`;
-  const adsTxtSnippet = `google.com, ${pubId ? pubId.replace('ca-pub-', 'pub-') : 'pub-0000000000000000'}, DIRECT, f08c47fec0942fa0`;
+  const autoAdsSnippet = `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${pubId || 'ca-pub-1204327016318163'}" crossorigin="anonymous"></script>`;
+  const adsTxtSnippet = `google.com, ${pubId ? pubId.replace('ca-pub-', 'pub-') : 'pub-1204327016318163'}, DIRECT, f08c47fec0942fa0`;
 
   return (
     <div className="bg-[#1E1915] border border-[#382E24] rounded-3xl p-4 md:p-6 shadow-2xl text-[#F5E9D3] max-w-4xl mx-auto my-6 space-y-6">

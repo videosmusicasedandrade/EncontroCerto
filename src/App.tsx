@@ -18,6 +18,7 @@ import { Footer } from './components/Footer';
 import { UserProfile, CertcoinLote, Postagem, Match, Mensagem, Nota, Denuncia, NotificacaoPush } from './types';
 import { MOCK_USERS, INITIAL_POSTS, INITIAL_LOTES, INITIAL_MATCHES, INITIAL_MESSAGES } from './lib/store';
 import { getEstadoConfig } from './lib/estados';
+import { detectUserLocation, ESTADOS_COORDENADAS } from './lib/geolocation';
 
 function safeGetJSON<T>(key: string, fallback: T): T {
   try {
@@ -84,11 +85,71 @@ export default function App() {
   const [showNotifsModal, setShowNotifsModal] = useState<boolean>(false);
   const [complianceTab, setComplianceTab] = useState<'privacy' | 'terms' | 'about' | 'contact' | 'adsense' | null>(null);
 
+  const [geoNotice, setGeoNotice] = useState<{
+    show: boolean;
+    nome: string;
+    sigla: string;
+    emblem: string;
+    cidade?: string;
+    metodo: string;
+  } | null>(null);
+
+  // Detecção Automática de Localização no Carregamento do Site
+  useEffect(() => {
+    let active = true;
+
+    detectUserLocation((detected) => {
+      if (!active) return;
+      setCurrentEstadoSigla(detected.sigla);
+      const cfg = getEstadoConfig(detected.sigla);
+
+      setGeoNotice({
+        show: true,
+        nome: detected.nome,
+        sigla: detected.sigla,
+        emblem: cfg.emblem,
+        cidade: detected.cidade,
+        metodo: detected.metodo === 'gps' ? 'GPS do Dispositivo' : 'Conexão de Rede',
+      });
+
+      // Esconde aviso sutil após 6 segundos
+      setTimeout(() => {
+        if (active) {
+          setGeoNotice((prev) => (prev ? { ...prev, show: false } : null));
+        }
+      }, 6000);
+
+      // Sincroniza usuário logado com a localização detectada
+      setCurrentUser((prevUser) => {
+        if (!prevUser) return null;
+        if (prevUser.estado_sigla === detected.sigla) return prevUser;
+        const coords = ESTADOS_COORDENADAS[detected.sigla];
+        return {
+          ...prevUser,
+          estado_sigla: detected.sigla,
+          cidade: detected.cidade || prevUser.cidade,
+          latitude: coords ? coords.lat : prevUser.latitude,
+          longitude: coords ? coords.lng : prevUser.longitude,
+        };
+      });
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const handleSelectEstado = (sigla: string) => {
     setCurrentEstadoSigla(sigla);
     localStorage.setItem('encontro_certo_estado', JSON.stringify(sigla));
     if (currentUser) {
-      const updated = { ...currentUser, estado_sigla: sigla };
+      const coords = ESTADOS_COORDENADAS[sigla];
+      const updated = {
+        ...currentUser,
+        estado_sigla: sigla,
+        latitude: coords ? coords.lat : currentUser.latitude,
+        longitude: coords ? coords.lng : currentUser.longitude,
+      };
       setCurrentUser(updated);
       setUsuarios((prev) => prev.map((u) => (u.id === currentUser.id ? updated : u)));
     }
@@ -438,12 +499,31 @@ export default function App() {
   // Se não estiver logado, mostra a tela de Login / Cadastro
   if (!currentUser) {
     return (
-      <LoginScreen
-        estadoConfig={estadoConfig}
-        onSelectEstado={handleSelectEstado}
-        onLogin={handleLogin}
-        onRegister={handleRegister}
-      />
+      <>
+        {geoNotice?.show && (
+          <div className="fixed top-4 right-4 z-50 max-w-sm bg-[#1E1915] border border-[#E8A838]/50 shadow-2xl rounded-2xl p-3.5 text-[#F5E9D3] backdrop-blur-md animate-fadeIn">
+            <div className="flex items-center space-x-3">
+              <span className="text-2xl">{geoNotice.emblem}</span>
+              <div className="space-y-0.5">
+                <div className="flex items-center space-x-1.5 text-xs font-black">
+                  <span className="text-[#E8A838]">📍 Localização:</span>
+                  <span>{geoNotice.nome} ({geoNotice.sigla})</span>
+                </div>
+                <p className="text-[11px] text-[#C8B8A0]">
+                  {geoNotice.cidade ? `Detectado em ${geoNotice.cidade}. ` : ''}
+                  Identificado por {geoNotice.metodo}.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+        <LoginScreen
+          estadoConfig={estadoConfig}
+          onSelectEstado={handleSelectEstado}
+          onLogin={handleLogin}
+          onRegister={handleRegister}
+        />
+      </>
     );
   }
 
@@ -454,6 +534,25 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#120F0D] text-[#F5E9D3] font-sans pb-20 md:pb-0">
+      {/* Floating Geolocation Detection Toast */}
+      {geoNotice?.show && (
+        <div className="fixed top-20 right-4 z-50 max-w-sm bg-[#1E1915] border border-[#E8A838]/50 shadow-2xl rounded-2xl p-3.5 text-[#F5E9D3] backdrop-blur-md animate-fadeIn">
+          <div className="flex items-center space-x-3">
+            <span className="text-2xl">{geoNotice.emblem}</span>
+            <div className="space-y-0.5">
+              <div className="flex items-center space-x-1.5 text-xs font-black">
+                <span className="text-[#E8A838]">📍 Localização:</span>
+                <span>{geoNotice.nome} ({geoNotice.sigla})</span>
+              </div>
+              <p className="text-[11px] text-[#C8B8A0]">
+                {geoNotice.cidade ? `Detectado em ${geoNotice.cidade}. ` : ''}
+                Identificado por {geoNotice.metodo}.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Navbar
         currentUser={currentUser}
         estadoConfig={estadoConfig}

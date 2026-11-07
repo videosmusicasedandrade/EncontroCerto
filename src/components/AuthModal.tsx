@@ -113,22 +113,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-bold text-[#C8B8A0] uppercase mb-1">
-                Estado (UF)
+                Estado (Fixo por Localização)
               </label>
-              <select
-                value={estadoSigla}
-                onChange={(e) => {
-                  setEstadoSigla(e.target.value);
-                  if (onSelectEstado) onSelectEstado(e.target.value);
-                }}
-                className="w-full px-3 py-3 rounded-2xl border border-[#382E24] bg-[#120F0D] text-[#F5E9D3] font-black text-xs focus:outline-none"
+              <div
+                className="w-full px-3 py-3 rounded-2xl border border-[#382E24] bg-[#120F0D] text-[#F5E9D3] font-black text-xs flex items-center justify-between"
+                title="Estado definido automaticamente pela sua localização"
               >
-                {ESTADOS_BRASIL.map((est) => (
-                  <option key={est.sigla} value={est.sigla}>
-                    {est.emblem} {est.sigla} — {est.nome}
-                  </option>
-                ))}
-              </select>
+                <span className="truncate">{activeEstado.emblem} {activeEstado.sigla} — {activeEstado.nome}</span>
+                <span className="text-[#E8A838] text-xs ml-1" title="Fixo por localização">🔒</span>
+              </div>
             </div>
             <div>
               <label className="block text-xs font-bold text-[#C8B8A0] uppercase mb-1">
