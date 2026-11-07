@@ -1,5 +1,21 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Gamepad2, Trophy, Coins, RotateCcw, Sparkles, Heart, Zap, Users, Crown, ChevronLeft, Shield } from 'lucide-react';
+import {
+  Gamepad2,
+  Trophy,
+  Coins,
+  Sparkles,
+  Zap,
+  Users,
+  Crown,
+  ChevronLeft,
+  Shield,
+  Scissors,
+  X,
+  Maximize2,
+  ArrowRight,
+  Crosshair,
+  MapPin,
+} from 'lucide-react';
 import { UserProfile, EstadoConfig } from '../types';
 
 interface GamesViewProps {
@@ -9,14 +25,26 @@ interface GamesViewProps {
   onAddCertcoins: (quantidade: number) => void;
 }
 
-interface PlayerEntity {
+interface PlayerCell {
+  id: string;
+  x: number;
+  y: number;
+  radius: number;
+  vx: number;
+  vy: number;
+  ejectVx: number;
+  ejectVy: number;
+  canMergeAt: number; // timestamp when this cell can re-merge
+  score: number;
+}
+
+interface Competitor {
   id: string;
   name: string;
   x: number;
   y: number;
   radius: number;
   color: string;
-  isPlayer: boolean;
   isOnline: boolean;
   avatar?: string;
   score: number;
@@ -24,7 +52,12 @@ interface PlayerEntity {
   targetY?: number;
   vx: number;
   vy: number;
+  ejectVx?: number;
+  ejectVy?: number;
+  canMergeAt?: number;
+  parentId?: string;
   decisionCooldown?: number;
+  splitCooldown?: number;
 }
 
 interface FoodPellet {
@@ -34,6 +67,10 @@ interface FoodPellet {
   radius: number;
   color: string;
 }
+
+// World Dimensions: Spacious, vast arena
+const WORLD_WIDTH = 3200;
+const WORLD_HEIGHT = 2400;
 
 export const GamesView: React.FC<GamesViewProps> = ({
   currentUser,
@@ -45,17 +82,32 @@ export const GamesView: React.FC<GamesViewProps> = ({
 
   // --- AGAR.IO STATE ---
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [agarioScore, setAgarioScore] = useState(10);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [totalPlayerScore, setTotalPlayerScore] = useState(10);
   const [highScore, setHighScore] = useState(10);
   const [agarioGameOver, setAgarioGameOver] = useState(false);
   const [agarioWonCoins, setAgarioWonCoins] = useState(0);
-  const [leaderboard, setLeaderboard] = useState<{ id: string; name: string; score: number; isPlayer: boolean; isOnline: boolean }[]>([]);
+  const [leaderboard, setLeaderboard] = useState<
+    { id: string; name: string; score: number; isPlayer: boolean; isOnline: boolean }[]
+  >([]);
   const [killFeed, setKillFeed] = useState<string[]>([]);
-  const [onlineCountInRoom, setOnlineCountInRoom] = useState(6);
+  const [onlineCountInRoom, setOnlineCountInRoom] = useState(8);
   const [isBoosting, setIsBoosting] = useState(false);
+  const [playerCellsCount, setPlayerCellsCount] = useState(1);
+  const [isShieldActive, setIsShieldActive] = useState(true);
 
-  // Touch control ref
-  const touchPosRef = useRef<{ x: number; y: number; active: boolean } | null>(null);
+  // Direction vector (-1 to 1) controlled by responsive joystick or keyboard
+  const directionRef = useRef<{ x: number; y: number; active: boolean }>({ x: 0, y: 0, active: false });
+  const splitRequestedRef = useRef<boolean>(false);
+  const boostRequestedRef = useRef<boolean>(false);
+
+  // Joystick touch tracking
+  const joystickBaseRef = useRef<HTMLDivElement | null>(null);
+  const [joystickKnob, setJoystickKnob] = useState<{ x: number; y: number; active: boolean }>({
+    x: 0,
+    y: 0,
+    active: false,
+  });
 
   // --- MEMORY GAME STATE ---
   const [memoryCards, setMemoryCards] = useState<{ id: number; symbol: string; flipped: boolean; matched: boolean }[]>([]);
@@ -63,11 +115,11 @@ export const GamesView: React.FC<GamesViewProps> = ({
   const [memoryPhase, setMemoryPhase] = useState(1);
   const [memoryWon, setMemoryWon] = useState(false);
 
-  // Initialize Memory Game with State Emojis
   const startMemoryGame = () => {
-    const symbols = estadoConfig.emojisGame && estadoConfig.emojisGame.length >= 6
-      ? estadoConfig.emojisGame
-      : ['🧀', '☕', '⛪', '🎸', '🏖️', estadoConfig.emblem];
+    const symbols =
+      estadoConfig.emojisGame && estadoConfig.emojisGame.length >= 6
+        ? estadoConfig.emojisGame
+        : ['🧀', '☕', '⛪', '🎸', '🏖️', estadoConfig.emblem];
     const deck = [...symbols, ...symbols]
       .sort(() => Math.random() - 0.5)
       .map((symbol, index) => ({ id: index, symbol, flipped: false, matched: false }));
@@ -92,14 +144,16 @@ export const GamesView: React.FC<GamesViewProps> = ({
       const secondCard = memoryCards.find((c) => c.id === secondId);
 
       if (firstCard && secondCard && firstCard.symbol === secondCard.symbol) {
-        setMemoryCards((prev) => prev.map((c) => (c.id === firstId || c.id === secondId ? { ...c, matched: true } : c)));
+        setMemoryCards((prev) =>
+          prev.map((c) => (c.id === firstId || c.id === secondId ? { ...c, matched: true } : c))
+        );
         setFlippedCards([]);
 
         setTimeout(() => {
           const allMatched = newCards.every((c) => c.matched || c.id === firstId || c.id === secondId);
           if (allMatched) {
             setMemoryWon(true);
-            onAddCertcoins(0.50);
+            onAddCertcoins(0.5);
           }
         }, 300);
       } else {
@@ -113,7 +167,69 @@ export const GamesView: React.FC<GamesViewProps> = ({
     }
   };
 
-  // --- AGAR.IO CANVAS GAME LOOP ---
+  // High Sensitivity Joystick touch handlers (Right hand)
+  const handleJoystickTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
+    e.stopPropagation();
+    handleJoystickMove(e);
+  };
+
+  const handleJoystickMove = (e: React.TouchEvent | React.MouseEvent) => {
+    e.stopPropagation();
+    if (!joystickBaseRef.current) return;
+    const rect = joystickBaseRef.current.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    let clientX = 0;
+    let clientY = 0;
+    if ('touches' in e && e.touches.length > 0) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else if ('clientX' in e) {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    }
+
+    const maxRadius = rect.width / 2;
+    let dx = clientX - centerX;
+    let dy = clientY - centerY;
+    const dist = Math.hypot(dx, dy);
+
+    if (dist <= 2) {
+      setJoystickKnob({ x: 0, y: 0, active: true });
+      directionRef.current = { x: 0, y: 0, active: true };
+      return;
+    }
+
+    // Clamp knob inside ring
+    const clampedDist = Math.min(dist, maxRadius);
+    const knobX = (dx / dist) * clampedDist;
+    const knobY = (dy / dist) * clampedDist;
+
+    // HIGH SENSITIVITY CURVE: Even a slight finger nudge outputs strong responsive vector
+    const sensitivity = 1.6;
+    const normalizedDist = Math.min(1, (clampedDist / maxRadius) * sensitivity);
+    const factor = Math.pow(normalizedDist, 0.7); // Sublinear power curve for instant responsiveness
+    const angle = Math.atan2(dy, dx);
+    const normX = Math.cos(angle) * factor;
+    const normY = Math.sin(angle) * factor;
+
+    setJoystickKnob({ x: knobX, y: knobY, active: true });
+    directionRef.current = { x: normX, y: normY, active: true };
+  };
+
+  const handleJoystickEnd = (e: React.TouchEvent | React.MouseEvent) => {
+    e.stopPropagation();
+    setJoystickKnob({ x: 0, y: 0, active: false });
+    directionRef.current = { x: 0, y: 0, active: false };
+  };
+
+  // Request cell division (Split in two)
+  const handleTriggerSplit = () => {
+    splitRequestedRef.current = true;
+  };
+
+  // --- AGAR.IO CANVAS GAME LOOP WITH CAMERA & LARGE WORLD ---
   useEffect(() => {
     if (activeGame !== 'agario') return;
     const canvas = canvasRef.current;
@@ -122,165 +238,286 @@ export const GamesView: React.FC<GamesViewProps> = ({
     if (!ctx) return;
 
     let animationFrameId: number;
-    let currentScore = 10;
     let isGameOver = false;
 
-    // Arena dimensions
-    const width = canvas.width;
-    const height = canvas.height;
-
-    // Player Object
-    const player: PlayerEntity = {
-      id: 'player',
-      name: currentUser.nome.split(' ')[0] || 'Você',
-      x: width / 2,
-      y: height / 2,
-      radius: 16,
-      color: estadoConfig.cor || '#E8A838',
-      isPlayer: true,
-      isOnline: true,
-      avatar: currentUser.foto,
-      score: 10,
-      vx: 0,
-      vy: 0,
+    // Full viewport setup
+    const resizeCanvas = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
     };
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
 
-    // Online Users & Moderate AI Bots
+    let screenWidth = canvas.width;
+    let screenHeight = canvas.height;
+
+    // Camera Coordinates in World
+    let cameraX = WORLD_WIDTH / 2 - screenWidth / 2;
+    let cameraY = WORLD_HEIGHT / 2 - screenHeight / 2;
+
+    // Online Users & Moderate/Medium AI Bots
     const otherUsers = usuarios.filter((u) => u.id !== currentUser.id);
-    const onlineNames = otherUsers.slice(0, 3).map((u) => ({
+    const onlineNames = otherUsers.slice(0, 4).map((u) => ({
       name: u.nome.split(' ')[0],
       avatar: u.foto,
       isOnline: true,
     }));
 
-    // Fallback names if few mock users
     const defaultOnline = [
       { name: 'Mariana', isOnline: true },
       { name: 'João Pedro', isOnline: true },
       { name: 'Camila', isOnline: true },
+      { name: 'Lucas', isOnline: true },
+    ];
+    const activeOnline = onlineNames.length > 0 ? onlineNames : defaultOnline;
+    const botColors = [
+      '#8B5CF6',
+      '#EC4899',
+      '#3B82F6',
+      '#10B981',
+      '#F59E0B',
+      '#06B6D4',
+      '#E11D48',
+      '#14B8A6',
+      '#84CC16',
     ];
 
-    const activeOnline = onlineNames.length > 0 ? onlineNames : defaultOnline;
-
-    const botColors = ['#8B5CF6', '#EC4899', '#3B82F6', '#10B981', '#F59E0B', '#06B6D4'];
-
-    let competitors: PlayerEntity[] = [
-      // Online Real Users in the Room
+    let competitors: Competitor[] = [
       ...activeOnline.map((u, i) => ({
         id: `online-${i}`,
         name: u.name,
-        x: 60 + Math.random() * (width - 120),
-        y: 60 + Math.random() * (height - 120),
-        radius: 15 + Math.floor(Math.random() * 8),
+        x: 200 + Math.random() * (WORLD_WIDTH - 400),
+        y: 200 + Math.random() * (WORLD_HEIGHT - 400),
+        radius: 18 + Math.floor(Math.random() * 8),
         color: botColors[i % botColors.length],
-        isPlayer: false,
         isOnline: true,
         avatar: (u as any).avatar,
-        score: 12 + Math.floor(Math.random() * 15),
-        vx: (Math.random() - 0.5) * 1.5,
-        vy: (Math.random() - 0.5) * 1.5,
+        score: 16 + Math.floor(Math.random() * 16),
+        vx: (Math.random() - 0.5) * 1.6,
+        vy: (Math.random() - 0.5) * 1.6,
         decisionCooldown: Math.floor(Math.random() * 20),
+        splitCooldown: 60 + Math.floor(Math.random() * 80),
       })),
-      // Moderate Bots with Natural Names
       {
         id: 'bot-1',
         name: 'Bot Zé',
-        x: 80,
-        y: 100,
-        radius: 16,
+        x: 400,
+        y: 500,
+        radius: 20,
         color: '#06B6D4',
-        isPlayer: false,
         isOnline: false,
-        score: 14,
+        score: 20,
         vx: 1.2,
         vy: 1,
         decisionCooldown: 10,
+        splitCooldown: 90,
       },
       {
         id: 'bot-2',
         name: 'Bot Raimundo',
-        x: width - 100,
-        y: 120,
-        radius: 20,
+        x: WORLD_WIDTH - 500,
+        y: 400,
+        radius: 24,
         color: '#8B5CF6',
-        isPlayer: false,
         isOnline: false,
-        score: 22,
-        vx: -1,
-        vy: 1.2,
+        score: 28,
+        vx: -1.2,
+        vy: 1.3,
         decisionCooldown: 15,
+        splitCooldown: 70,
       },
       {
         id: 'bot-3',
         name: 'Bot Maria',
-        x: width / 2,
-        y: height - 80,
-        radius: 18,
+        x: WORLD_WIDTH / 2,
+        y: WORLD_HEIGHT - 400,
+        radius: 22,
         color: '#EF4444',
-        isPlayer: false,
         isOnline: false,
-        score: 18,
-        vx: 0.8,
+        score: 24,
+        vx: 0.9,
         vy: -1.2,
         decisionCooldown: 25,
+        splitCooldown: 80,
+      },
+      {
+        id: 'bot-4',
+        name: 'Bot Tião',
+        x: WORLD_WIDTH - 400,
+        y: WORLD_HEIGHT - 500,
+        radius: 21,
+        color: '#EAB308',
+        isOnline: false,
+        score: 22,
+        vx: -1.1,
+        vy: -0.9,
+        decisionCooldown: 18,
+        splitCooldown: 100,
+      },
+      {
+        id: 'bot-5',
+        name: 'Bot Chico',
+        x: 600,
+        y: WORLD_HEIGHT - 600,
+        radius: 19,
+        color: '#10B981',
+        isOnline: false,
+        score: 18,
+        vx: 1,
+        vy: -1.1,
+        decisionCooldown: 12,
+        splitCooldown: 90,
+      },
+      {
+        id: 'bot-6',
+        name: 'Bot Tonho',
+        x: WORLD_WIDTH / 2 - 300,
+        y: 600,
+        radius: 23,
+        color: '#F43F5E',
+        isOnline: false,
+        score: 26,
+        vx: -0.8,
+        vy: 1.2,
+        decisionCooldown: 20,
+        splitCooldown: 85,
       },
     ];
 
     setOnlineCountInRoom(competitors.length + 1);
 
-    // Food Pellets
-    let foods: FoodPellet[] = Array.from({ length: 48 }, (_, idx) => ({
+    // Calculate Safe Spawn Position in the vast world
+    const findSafeSpawn = (): { x: number; y: number } => {
+      let bestX = WORLD_WIDTH / 2;
+      let bestY = WORLD_HEIGHT / 2;
+      let maxDistance = -1;
+
+      for (let i = 0; i < 40; i++) {
+        const candX = 250 + Math.random() * (WORLD_WIDTH - 500);
+        const candY = 250 + Math.random() * (WORLD_HEIGHT - 500);
+        let minD = Infinity;
+
+        for (const c of competitors) {
+          const d = Math.hypot(candX - c.x, candY - c.y);
+          if (d < minD) minD = d;
+        }
+
+        if (minD > maxDistance) {
+          maxDistance = minD;
+          bestX = candX;
+          bestY = candY;
+        }
+      }
+      return { x: bestX, y: bestY };
+    };
+
+    const initialSpawn = findSafeSpawn();
+
+    // Initial Player with 1 cell
+    let playerCells: PlayerCell[] = [
+      {
+        id: 'cell-0',
+        x: initialSpawn.x,
+        y: initialSpawn.y,
+        radius: 18,
+        vx: 0,
+        vy: 0,
+        ejectVx: 0,
+        ejectVy: 0,
+        canMergeAt: 0,
+        score: 10,
+      },
+    ];
+
+    setPlayerCellsCount(1);
+    setTotalPlayerScore(10);
+
+    // Safe Shield at Spawn (3 seconds of invulnerability)
+    let shieldUntil = Date.now() + 3000;
+    setIsShieldActive(true);
+
+    // Food Pellets in the vast world (220 pellets)
+    const foodCount = 220;
+    let foods: FoodPellet[] = Array.from({ length: foodCount }, (_, idx) => ({
       id: idx,
-      x: 20 + Math.random() * (width - 40),
-      y: 20 + Math.random() * (height - 40),
+      x: 40 + Math.random() * (WORLD_WIDTH - 80),
+      y: 40 + Math.random() * (WORLD_HEIGHT - 80),
       radius: 4,
-      color: ['#F59E0B', '#EC4899', '#10B981', '#3B82F6', '#E8A838', '#A855F7'][Math.floor(Math.random() * 6)],
+      color: ['#F59E0B', '#EC4899', '#10B981', '#3B82F6', '#E8A838', '#A855F7', '#14B8A6', '#F43F5E'][
+        Math.floor(Math.random() * 8)
+      ],
     }));
 
-    // Mouse / Touch Position tracking
-    let targetX = player.x;
-    let targetY = player.y;
-
-    const updateTarget = (clientX: number, clientY: number) => {
-      const rect = canvas.getBoundingClientRect();
-      const scaleX = canvas.width / rect.width;
-      const scaleY = canvas.height / rect.height;
-      targetX = (clientX - rect.left) * scaleX;
-      targetY = (clientY - rect.top) * scaleY;
-      touchPosRef.current = { x: targetX, y: targetY, active: true };
-    };
-
-    const handleMouseMove = (e: MouseEvent) => {
-      updateTarget(e.clientX, e.clientY);
-    };
-
-    // Mobile Touch handlers with touch-action prevention
-    const handleTouchStart = (e: TouchEvent) => {
+    // Touch on Canvas direct fallback
+    const handleCanvasTouch = (e: TouchEvent) => {
       if (e.touches.length > 0) {
-        e.preventDefault();
-        updateTarget(e.touches[0].clientX, e.touches[0].clientY);
+        const t = e.touches[0];
+        if (t.clientX > screenWidth - 170 && t.clientY > screenHeight - 170) return; // joystick
+        if (t.clientX < 170 && t.clientY > screenHeight - 170) return; // split
+
+        // Transform screen touch coordinate to world coordinate using camera offset
+        const worldTouchX = t.clientX + cameraX;
+        const worldTouchY = t.clientY + cameraY;
+
+        const primaryCell = playerCells[0];
+        if (primaryCell) {
+          const dx = worldTouchX - primaryCell.x;
+          const dy = worldTouchY - primaryCell.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist > 5) {
+            directionRef.current = {
+              x: dx / dist,
+              y: dy / dist,
+              active: true,
+            };
+          }
+        }
       }
     };
 
-    const handleTouchMove = (e: TouchEvent) => {
-      if (e.touches.length > 0) {
-        e.preventDefault();
-        updateTarget(e.touches[0].clientX, e.touches[0].clientY);
+    // Keyboard support for PC (WASD / Arrows / Space for Split)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        splitRequestedRef.current = true;
+      }
+      if (e.code === 'KeyW' || e.code === 'ArrowUp') directionRef.current.y = -1;
+      if (e.code === 'KeyS' || e.code === 'ArrowDown') directionRef.current.y = 1;
+      if (e.code === 'KeyA' || e.code === 'ArrowLeft') directionRef.current.x = -1;
+      if (e.code === 'KeyD' || e.code === 'ArrowRight') directionRef.current.x = 1;
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') boostRequestedRef.current = true;
+      if (directionRef.current.x !== 0 || directionRef.current.y !== 0) {
+        directionRef.current.active = true;
       }
     };
 
-    const handleTouchEnd = () => {
-      if (touchPosRef.current) {
-        touchPosRef.current.active = false;
-      }
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') boostRequestedRef.current = false;
+      if (
+        (e.code === 'KeyW' || e.code === 'ArrowUp') &&
+        directionRef.current.y < 0
+      )
+        directionRef.current.y = 0;
+      if (
+        (e.code === 'KeyS' || e.code === 'ArrowDown') &&
+        directionRef.current.y > 0
+      )
+        directionRef.current.y = 0;
+      if (
+        (e.code === 'KeyA' || e.code === 'ArrowLeft') &&
+        directionRef.current.x < 0
+      )
+        directionRef.current.x = 0;
+      if (
+        (e.code === 'KeyD' || e.code === 'ArrowRight') &&
+        directionRef.current.x > 0
+      )
+        directionRef.current.x = 0;
     };
 
-    canvas.addEventListener('mousemove', handleMouseMove);
-    canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
-    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-    canvas.addEventListener('touchend', handleTouchEnd);
+    canvas.addEventListener('touchmove', handleCanvasTouch, { passive: true });
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
 
-    // Add kill feed notice
     const addFeed = (text: string) => {
       setKillFeed((prev) => [text, ...prev.slice(0, 3)]);
     };
@@ -291,38 +528,88 @@ export const GamesView: React.FC<GamesViewProps> = ({
     const update = () => {
       if (isGameOver) return;
       frameCount++;
+      screenWidth = canvas.width;
+      screenHeight = canvas.height;
 
-      ctx.clearRect(0, 0, width, height);
+      // Update Shield state
+      const shielded = Date.now() < shieldUntil;
+      if (isShieldActive !== shielded) {
+        setIsShieldActive(shielded);
+      }
 
-      // 1. Draw subtle arena grid
-      ctx.strokeStyle = '#2A231D';
-      ctx.lineWidth = 1;
-      const gridSize = 40;
-      for (let x = 0; x < width; x += gridSize) {
+      // 1. Calculate Player Center of Mass for Smooth Camera Follow
+      let pCenterX = 0;
+      let pCenterY = 0;
+      if (playerCells.length > 0) {
+        playerCells.forEach((c) => {
+          pCenterX += c.x;
+          pCenterY += c.y;
+        });
+        pCenterX /= playerCells.length;
+        pCenterY /= playerCells.length;
+      } else {
+        pCenterX = WORLD_WIDTH / 2;
+        pCenterY = WORLD_HEIGHT / 2;
+      }
+
+      // Smooth camera interpolation towards player center
+      const targetCamX = pCenterX - screenWidth / 2;
+      const targetCamY = pCenterY - screenHeight / 2;
+      cameraX += (targetCamX - cameraX) * 0.14;
+      cameraY += (targetCamY - cameraY) * 0.14;
+
+      // Clamp camera within world bounds
+      cameraX = Math.max(0, Math.min(WORLD_WIDTH - screenWidth, cameraX));
+      cameraY = Math.max(0, Math.min(WORLD_HEIGHT - screenHeight, cameraY));
+
+      ctx.clearRect(0, 0, screenWidth, screenHeight);
+
+      // --- SAVE CTX AND APPLY CAMERA OFFSET TO WORLD ---
+      ctx.save();
+      ctx.translate(-cameraX, -cameraY);
+
+      // 2. Draw World Background & Subtle Arena Grid
+      ctx.fillStyle = '#080605';
+      ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+
+      ctx.strokeStyle = '#1D1713';
+      ctx.lineWidth = 1.2;
+      const gridSize = 50;
+      for (let x = 0; x <= WORLD_WIDTH; x += gridSize) {
         ctx.beginPath();
         ctx.moveTo(x, 0);
-        ctx.lineTo(x, height);
+        ctx.lineTo(x, WORLD_HEIGHT);
         ctx.stroke();
       }
-      for (let y = 0; y < height; y += gridSize) {
+      for (let y = 0; y <= WORLD_HEIGHT; y += gridSize) {
         ctx.beginPath();
         ctx.moveTo(0, y);
-        ctx.lineTo(width, y);
+        ctx.lineTo(WORLD_WIDTH, y);
         ctx.stroke();
       }
 
-      // 2. Draw Touch Target Indicator if active on mobile
-      if (touchPosRef.current && touchPosRef.current.active) {
-        ctx.beginPath();
-        ctx.arc(touchPosRef.current.x, touchPosRef.current.y, 14, 0, Math.PI * 2);
-        ctx.strokeStyle = `${estadoConfig.cor}60`;
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        ctx.closePath();
-      }
+      // World Outer Boundary Walls
+      ctx.strokeStyle = '#E8A838';
+      ctx.lineWidth = 6;
+      ctx.strokeRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
 
-      // 3. Draw Foods
+      // Subtle inner danger glow on world boundary
+      ctx.strokeStyle = 'rgba(232, 168, 56, 0.2)';
+      ctx.lineWidth = 14;
+      ctx.strokeRect(7, 7, WORLD_WIDTH - 14, WORLD_HEIGHT - 14);
+
+      // 3. Draw Food Pellets
       foods.forEach((f) => {
+        // Culling: only draw if within camera view
+        if (
+          f.x + f.radius < cameraX ||
+          f.x - f.radius > cameraX + screenWidth ||
+          f.y + f.radius < cameraY ||
+          f.y - f.radius > cameraY + screenHeight
+        ) {
+          return;
+        }
+
         ctx.beginPath();
         ctx.arc(f.x, f.y, f.radius, 0, Math.PI * 2);
         ctx.fillStyle = f.color;
@@ -333,77 +620,314 @@ export const GamesView: React.FC<GamesViewProps> = ({
         ctx.closePath();
       });
 
-      // 4. Update Player Position smoothly based on Touch/Mouse target
-      const dx = targetX - player.x;
-      const dy = targetY - player.y;
-      const distance = Math.hypot(dx, dy);
+      // 4. Handle Player Split in Two (Dividir em dois!)
+      if (splitRequestedRef.current) {
+        splitRequestedRef.current = false;
+        const currentDir = directionRef.current;
+        let launchDirX = currentDir.x;
+        let launchDirY = currentDir.y;
 
-      // Realistic Agar.io Speed: Smaller = faster, larger = slightly slower
-      const baseSpeed = isBoosting ? 5.5 : 3.8;
-      const massPenalty = Math.max(0.6, 1 - (player.radius - 16) * 0.008);
-      const moveSpeed = baseSpeed * massPenalty;
+        if (Math.hypot(launchDirX, launchDirY) < 0.1) {
+          launchDirX = 1;
+          launchDirY = 0;
+        } else {
+          const lDist = Math.hypot(launchDirX, launchDirY);
+          launchDirX /= lDist;
+          launchDirY /= lDist;
+        }
 
-      if (distance > 4) {
-        const step = Math.min(distance, moveSpeed);
-        player.x += (dx / distance) * step;
-        player.y += (dy / distance) * step;
-      }
+        const newCells: PlayerCell[] = [];
+        let didSplit = false;
 
-      // Keep player inside boundary
-      player.x = Math.max(player.radius, Math.min(width - player.radius, player.x));
-      player.y = Math.max(player.radius, Math.min(height - player.radius, player.y));
+        playerCells.forEach((cell) => {
+          if (cell.radius >= 17 && playerCells.length + newCells.length < 8) {
+            didSplit = true;
+            const splitRadius = Math.max(12, cell.radius * 0.71);
+            const halfScore = Math.max(5, Math.floor(cell.score / 2));
+            const mergeCooldown = Date.now() + 14000;
 
-      // 5. Check Player Food Collision
-      for (let i = foods.length - 1; i >= 0; i--) {
-        const f = foods[i];
-        if (Math.hypot(player.x - f.x, player.y - f.y) < player.radius + f.radius) {
-          currentScore += 1;
-          player.score = currentScore;
-          setAgarioScore(currentScore);
-          setHighScore((prev) => Math.max(prev, currentScore));
-          player.radius = Math.min(45, 16 + currentScore * 0.25);
+            cell.radius = splitRadius;
+            cell.score = halfScore;
+            cell.canMergeAt = mergeCooldown;
 
-          // Respawn pellet
-          foods[i] = {
-            id: Date.now() + i,
-            x: 20 + Math.random() * (width - 40),
-            y: 20 + Math.random() * (height - 40),
-            radius: 4,
-            color: ['#F59E0B', '#EC4899', '#10B981', '#3B82F6', '#E8A838', '#A855F7'][Math.floor(Math.random() * 6)],
-          };
+            newCells.push({
+              id: `cell-${Date.now()}-${Math.random()}`,
+              x: cell.x + launchDirX * (splitRadius * 1.5),
+              y: cell.y + launchDirY * (splitRadius * 1.5),
+              radius: splitRadius,
+              vx: launchDirX * 3.5,
+              vy: launchDirY * 3.5,
+              ejectVx: launchDirX * 15, // Snappy ejection boost!
+              ejectVy: launchDirY * 15,
+              canMergeAt: mergeCooldown,
+              score: halfScore,
+            });
+          }
+        });
+
+        if (didSplit) {
+          playerCells = [...playerCells, ...newCells];
+          setPlayerCellsCount(playerCells.length);
+          addFeed('➗ Você se dividiu em dois!');
         }
       }
 
-      // 6. Update Competitors (Moderate AI Logic + Online Players)
+      // 5. Update and Move Player Cells with High Joystick Sensitivity & Speed
+      const dir = directionRef.current;
+      const boost = boostRequestedRef.current || isBoosting;
+      const baseSpeed = boost ? 6.2 : 4.4;
+
+      playerCells.forEach((cell) => {
+        cell.ejectVx *= 0.88;
+        cell.ejectVy *= 0.88;
+        if (Math.hypot(cell.ejectVx, cell.ejectVy) < 0.1) {
+          cell.ejectVx = 0;
+          cell.ejectVy = 0;
+        }
+
+        const massFactor = Math.max(0.68, 1 - (cell.radius - 12) * 0.011);
+        const cellSpeed = baseSpeed * massFactor;
+
+        if (dir.active) {
+          cell.vx = dir.x * cellSpeed;
+          cell.vy = dir.y * cellSpeed;
+        } else {
+          cell.vx *= 0.85;
+          cell.vy *= 0.85;
+        }
+
+        cell.x += cell.vx + cell.ejectVx;
+        cell.y += cell.vy + cell.ejectVy;
+
+        // Keep inside World Boundaries
+        cell.x = Math.max(cell.radius + 6, Math.min(WORLD_WIDTH - cell.radius - 6, cell.x));
+        cell.y = Math.max(cell.radius + 6, Math.min(WORLD_HEIGHT - cell.radius - 6, cell.y));
+
+        // Eat Food Pellets
+        for (let i = foods.length - 1; i >= 0; i--) {
+          const f = foods[i];
+          if (Math.hypot(cell.x - f.x, cell.y - f.y) < cell.radius + f.radius) {
+            cell.score += 1;
+            cell.radius = Math.min(75, 12 + cell.score * 0.28);
+
+            // Respawn food in random location across the whole world
+            foods[i] = {
+              id: Date.now() + i,
+              x: 40 + Math.random() * (WORLD_WIDTH - 80),
+              y: 40 + Math.random() * (WORLD_HEIGHT - 80),
+              radius: 4,
+              color: ['#F59E0B', '#EC4899', '#10B981', '#3B82F6', '#E8A838', '#A855F7', '#14B8A6'][
+                Math.floor(Math.random() * 7)
+              ],
+            };
+          }
+        }
+      });
+
+      // 6. Player Cells Collision & Gradual Recombining ("entrando uma dentro da outra")
+      const now = Date.now();
+      for (let i = 0; i < playerCells.length; i++) {
+        for (let j = i + 1; j < playerCells.length; j++) {
+          const a = playerCells[i];
+          const b = playerCells[j];
+          if (!a || !b) continue;
+
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const dist = Math.hypot(dx, dy);
+          const totalRadius = a.radius + b.radius;
+
+          if (dist < totalRadius) {
+            const canMerge = now >= a.canMergeAt && now >= b.canMergeAt;
+
+            if (canMerge) {
+              const pullFactor = 0.16;
+              a.x += dx * pullFactor * 0.5;
+              a.y += dy * pullFactor * 0.5;
+              b.x -= dx * pullFactor * 0.5;
+              b.y -= dy * pullFactor * 0.5;
+
+              if (dist < Math.max(a.radius, b.radius) * 0.75) {
+                a.radius = Math.min(95, Math.sqrt(a.radius * a.radius + b.radius * b.radius));
+                a.score += b.score;
+                playerCells.splice(j, 1);
+                j--;
+                addFeed('✨ Suas células se fundiram de volta!');
+                setPlayerCellsCount(playerCells.length);
+              }
+            } else {
+              if (dist > 0.1) {
+                const overlap = (totalRadius - dist) * 0.35;
+                const pushX = (dx / dist) * overlap;
+                const pushY = (dy / dist) * overlap;
+                a.x -= pushX;
+                a.y -= pushY;
+                b.x += pushX;
+                b.y += pushY;
+              }
+            }
+          }
+        }
+      }
+
+      const currentTotalScore = playerCells.reduce((sum, c) => sum + c.score, 0);
+      setTotalPlayerScore(currentTotalScore);
+      setHighScore((prev) => Math.max(prev, currentTotalScore));
+
+      // 7. Update Competitors (Medium AI: Hunt, Flee, Eat Bots, Split Attack)
+      const newCompetitorSplits: Competitor[] = [];
+
       competitors.forEach((c) => {
-        // Natural decision interval (every 15-25 frames) so bot acts with human-like moderation
+        // Friction on competitor ejection
+        if (c.ejectVx || c.ejectVy) {
+          c.ejectVx = (c.ejectVx || 0) * 0.88;
+          c.ejectVy = (c.ejectVy || 0) * 0.88;
+        }
+
         c.decisionCooldown = (c.decisionCooldown || 0) - 1;
+        c.splitCooldown = (c.splitCooldown || 0) - 1;
+
         if (c.decisionCooldown <= 0) {
           c.decisionCooldown = 15 + Math.floor(Math.random() * 15);
 
-          let chosenTargetX = c.x + c.vx * 30;
-          let chosenTargetY = c.y + c.vy * 30;
+          let chosenTargetX = c.x + c.vx * 35;
+          let chosenTargetY = c.y + c.vy * 35;
 
-          // AI Evaluation:
-          // A. Is player nearby?
-          const distToPlayer = Math.hypot(player.x - c.x, player.y - c.y);
+          // A. Check distance to closest player cell
+          let closestPlayerCell: PlayerCell | null = null;
+          let minPlayerDist = Infinity;
+          playerCells.forEach((pCell) => {
+            const d = Math.hypot(pCell.x - c.x, pCell.y - c.y);
+            if (d < minPlayerDist) {
+              minPlayerDist = d;
+              closestPlayerCell = pCell;
+            }
+          });
 
-          if (distToPlayer < 140) {
-            if (player.radius > c.radius * 1.1) {
-              // FLEE: Player is bigger! Run away moderately in opposite direction
-              const escapeAngle = Math.atan2(c.y - player.y, c.x - player.x);
-              chosenTargetX = c.x + Math.cos(escapeAngle) * 80;
-              chosenTargetY = c.y + Math.sin(escapeAngle) * 80;
-            } else if (c.radius > player.radius * 1.15 && distToPlayer < 110) {
-              // HUNT: Bot is clearly bigger! Pursue player with moderate speed
-              chosenTargetX = player.x;
-              chosenTargetY = player.y;
+          // B. Check distance to other competitors (Bots hunting other bots!)
+          let closestThreatBot: Competitor | null = null;
+          let minThreatDist = Infinity;
+          let closestPreyBot: Competitor | null = null;
+          let minPreyDist = Infinity;
+
+          competitors.forEach((other) => {
+            if (other.id === c.id || other.parentId === c.id || c.parentId === other.id) return;
+            const d = Math.hypot(other.x - c.x, other.y - c.y);
+            if (other.radius > c.radius * 1.15 && d < minThreatDist) {
+              minThreatDist = d;
+              closestThreatBot = other;
+            } else if (c.radius > other.radius * 1.15 && d < minPreyDist) {
+              minPreyDist = d;
+              closestPreyBot = other;
+            }
+          });
+
+          // DECISION TREE (Medium Level AI):
+          if (closestThreatBot && minThreatDist < 180) {
+            // FLEE from bigger bot!
+            const tb = closestThreatBot as Competitor;
+            const escapeAngle = Math.atan2(c.y - tb.y, c.x - tb.x);
+            chosenTargetX = c.x + Math.cos(escapeAngle) * 110;
+            chosenTargetY = c.y + Math.sin(escapeAngle) * 110;
+          } else if (closestPlayerCell && minPlayerDist < 170 && (closestPlayerCell as PlayerCell).radius > c.radius * 1.15) {
+            // FLEE from bigger player!
+            const targetCell = closestPlayerCell as PlayerCell;
+            const escapeAngle = Math.atan2(c.y - targetCell.y, c.x - targetCell.x);
+            chosenTargetX = c.x + Math.cos(escapeAngle) * 110;
+            chosenTargetY = c.y + Math.sin(escapeAngle) * 110;
+          } else if (closestPreyBot && minPreyDist < 200) {
+            // HUNT smaller bot!
+            const pb = closestPreyBot as Competitor;
+            chosenTargetX = pb.x;
+            chosenTargetY = pb.y;
+
+            // BOT SPLIT ATTACK: If in range, big enough, and cooldown is ready!
+            if (
+              (c.splitCooldown || 0) <= 0 &&
+              c.radius >= 22 &&
+              c.score >= 22 &&
+              minPreyDist > 80 &&
+              minPreyDist < 210 &&
+              c.radius * 0.71 > pb.radius * 1.05 &&
+              Math.random() < 0.45
+            ) {
+              c.splitCooldown = 180 + Math.floor(Math.random() * 100);
+              const launchAngle = Math.atan2(pb.y - c.y, pb.x - c.x);
+              const splitScore = Math.floor(c.score / 2);
+              c.score = splitScore;
+              c.radius = Math.max(14, c.radius * 0.71);
+              c.canMergeAt = Date.now() + 12000;
+
+              newCompetitorSplits.push({
+                id: `bot-split-${Date.now()}-${Math.random()}`,
+                name: c.name,
+                x: c.x + Math.cos(launchAngle) * (c.radius * 1.8),
+                y: c.y + Math.sin(launchAngle) * (c.radius * 1.8),
+                radius: c.radius,
+                color: c.color,
+                isOnline: c.isOnline,
+                avatar: c.avatar,
+                score: splitScore,
+                vx: Math.cos(launchAngle) * 2.8,
+                vy: Math.sin(launchAngle) * 2.8,
+                ejectVx: Math.cos(launchAngle) * 13, // Fast split dash towards prey!
+                ejectVy: Math.sin(launchAngle) * 13,
+                canMergeAt: Date.now() + 12000,
+                parentId: c.id,
+                decisionCooldown: 15,
+                splitCooldown: 200,
+              });
+              addFeed(`⚡ ${c.name} se dividiu para caçar!`);
+            }
+          } else if (closestPlayerCell && minPlayerDist < 200 && c.radius > (closestPlayerCell as PlayerCell).radius * 1.15 && !shielded) {
+            // HUNT smaller player!
+            const targetCell = closestPlayerCell as PlayerCell;
+            chosenTargetX = targetCell.x;
+            chosenTargetY = targetCell.y;
+
+            // BOT SPLIT ATTACK on player:
+            if (
+              (c.splitCooldown || 0) <= 0 &&
+              c.radius >= 22 &&
+              c.score >= 22 &&
+              minPlayerDist > 80 &&
+              minPlayerDist < 200 &&
+              c.radius * 0.71 > targetCell.radius * 1.05 &&
+              Math.random() < 0.4
+            ) {
+              c.splitCooldown = 180 + Math.floor(Math.random() * 100);
+              const launchAngle = Math.atan2(targetCell.y - c.y, targetCell.x - c.x);
+              const splitScore = Math.floor(c.score / 2);
+              c.score = splitScore;
+              c.radius = Math.max(14, c.radius * 0.71);
+              c.canMergeAt = Date.now() + 12000;
+
+              newCompetitorSplits.push({
+                id: `bot-split-${Date.now()}-${Math.random()}`,
+                name: c.name,
+                x: c.x + Math.cos(launchAngle) * (c.radius * 1.8),
+                y: c.y + Math.sin(launchAngle) * (c.radius * 1.8),
+                radius: c.radius,
+                color: c.color,
+                isOnline: c.isOnline,
+                avatar: c.avatar,
+                score: splitScore,
+                vx: Math.cos(launchAngle) * 2.8,
+                vy: Math.sin(launchAngle) * 2.8,
+                ejectVx: Math.cos(launchAngle) * 13,
+                ejectVy: Math.sin(launchAngle) * 13,
+                canMergeAt: Date.now() + 12000,
+                parentId: c.id,
+                decisionCooldown: 15,
+                splitCooldown: 200,
+              });
+              addFeed(`⚡ ${c.name} se dividiu em você!`);
             }
           } else {
-            // FORAGE: Find the closest food pellet
+            // FORAGE: Navigate to closest food pellet
             let closestFood: FoodPellet | null = null;
             let minFoodDist = Infinity;
-            foods.slice(0, 15).forEach((f) => {
+            foods.slice(0, 25).forEach((f) => {
               const d = Math.hypot(f.x - c.x, f.y - c.y);
               if (d < minFoodDist) {
                 minFoodDist = d;
@@ -426,29 +950,29 @@ export const GamesView: React.FC<GamesViewProps> = ({
           const cdx = c.targetX - c.x;
           const cdy = c.targetY - c.y;
           const cDist = Math.hypot(cdx, cdy);
-          const botSpeed = Math.max(1.2, 2.6 - (c.radius - 15) * 0.02);
+          const botSpeed = Math.max(1.3, 2.7 - (c.radius - 15) * 0.018);
           if (cDist > 4) {
             c.vx = (cdx / cDist) * botSpeed;
             c.vy = (cdy / cDist) * botSpeed;
           }
         }
 
-        c.x += c.vx;
-        c.y += c.vy;
+        c.x += c.vx + (c.ejectVx || 0);
+        c.y += c.vy + (c.ejectVy || 0);
 
-        // Bounce on boundary gently
-        if (c.x < c.radius) {
-          c.x = c.radius;
+        // World boundary bouncing
+        if (c.x < c.radius + 6) {
+          c.x = c.radius + 6;
           c.vx *= -1;
-        } else if (c.x > width - c.radius) {
-          c.x = width - c.radius;
+        } else if (c.x > WORLD_WIDTH - c.radius - 6) {
+          c.x = WORLD_WIDTH - c.radius - 6;
           c.vx *= -1;
         }
-        if (c.y < c.radius) {
-          c.y = c.radius;
+        if (c.y < c.radius + 6) {
+          c.y = c.radius + 6;
           c.vy *= -1;
-        } else if (c.y > height - c.radius) {
-          c.y = height - c.radius;
+        } else if (c.y > WORLD_HEIGHT - c.radius - 6) {
+          c.y = WORLD_HEIGHT - c.radius - 6;
           c.vy *= -1;
         }
 
@@ -457,11 +981,11 @@ export const GamesView: React.FC<GamesViewProps> = ({
           const f = foods[fi];
           if (Math.hypot(c.x - f.x, c.y - f.y) < c.radius + f.radius) {
             c.score += 1;
-            c.radius = Math.min(42, 15 + c.score * 0.22);
+            c.radius = Math.min(65, 14 + c.score * 0.24);
             foods[fi] = {
               id: Date.now() + fi,
-              x: 20 + Math.random() * (width - 40),
-              y: 20 + Math.random() * (height - 40),
+              x: 40 + Math.random() * (WORLD_WIDTH - 80),
+              y: 40 + Math.random() * (WORLD_HEIGHT - 80),
               radius: 4,
               color: ['#F59E0B', '#EC4899', '#10B981', '#3B82F6', '#E8A838'][Math.floor(Math.random() * 5)],
             };
@@ -469,90 +993,237 @@ export const GamesView: React.FC<GamesViewProps> = ({
           }
         }
 
-        // 7. Check Player vs Competitor Collision
-        const distWithPlayer = Math.hypot(player.x - c.x, player.y - c.y);
-        if (distWithPlayer < player.radius + c.radius - 2) {
-          if (player.radius > c.radius * 1.1) {
-            // Player DEVOURS Competitor!
-            currentScore += Math.floor(c.score * 0.6);
-            player.score = currentScore;
-            setAgarioScore(currentScore);
-            setHighScore((prev) => Math.max(prev, currentScore));
-            player.radius = Math.min(50, 16 + currentScore * 0.25);
-            addFeed(`Você devorou ${c.name} (+${Math.floor(c.score * 0.6)} pts)! 💥`);
+        // 8. BOTS DEVOURING OTHER BOTS!
+        for (let otherIdx = competitors.length - 1; otherIdx >= 0; otherIdx--) {
+          const other = competitors[otherIdx];
+          if (other.id === c.id || other.parentId === c.id || c.parentId === other.id) continue;
 
-            // Reward Certcoin for eliminating a competitor
-            onAddCertcoins(0.25);
+          const distBots = Math.hypot(c.x - other.x, c.y - other.y);
+          if (distBots < c.radius + other.radius - 3) {
+            if (c.radius > other.radius * 1.12) {
+              // Bot C devours Bot Other!
+              const gain = Math.floor(other.score * 0.55);
+              c.score += gain;
+              c.radius = Math.min(85, c.radius + gain * 0.16);
+              addFeed(`${c.name} devorou ${other.name} (+${gain} pts)!`);
 
-            // Respawn competitor at a safe distance
-            c.x = Math.random() < 0.5 ? 40 : width - 40;
-            c.y = Math.random() * height;
-            c.score = 12 + Math.floor(Math.random() * 6);
-            c.radius = 15;
-          } else if (c.radius > player.radius * 1.1) {
-            // Player is DEVOURS by Competitor -> Game Over
-            isGameOver = true;
-            setAgarioGameOver(true);
-            const prize = currentScore > 30 ? 1.00 : 0.50;
-            setAgarioWonCoins(prize);
-            onAddCertcoins(prize);
-            addFeed(`${c.name} eliminou você! 💔`);
+              // Respawn devoured bot elsewhere safely
+              other.x = 200 + Math.random() * (WORLD_WIDTH - 400);
+              other.y = 200 + Math.random() * (WORLD_HEIGHT - 400);
+              other.score = 14 + Math.floor(Math.random() * 6);
+              other.radius = 16;
+            }
           }
         }
 
-        // Draw Competitor Ball
-        ctx.beginPath();
-        ctx.arc(c.x, c.y, c.radius, 0, Math.PI * 2);
-        ctx.fillStyle = c.color;
-        ctx.fill();
-        ctx.lineWidth = 2.5;
-        ctx.strokeStyle = c.isOnline ? '#10B981' : '#ffffff';
-        ctx.stroke();
-        ctx.closePath();
+        // 9. Check Player Cells vs Competitor Collisions
+        for (let pIdx = playerCells.length - 1; pIdx >= 0; pIdx--) {
+          const pCell = playerCells[pIdx];
+          const distWithBot = Math.hypot(pCell.x - c.x, pCell.y - c.y);
 
-        // Label above competitor
-        ctx.fillStyle = '#F5E9D3';
-        ctx.font = 'bold 11px sans-serif';
-        ctx.textAlign = 'center';
-        const badge = c.isOnline ? ' 🟢' : '';
-        ctx.fillText(`${c.name}${badge}`, c.x, c.y - c.radius - 6);
+          if (distWithBot < pCell.radius + c.radius - 3) {
+            if (pCell.radius > c.radius * 1.1) {
+              // Player devours competitor!
+              const gain = Math.floor(c.score * 0.6);
+              pCell.score += gain;
+              pCell.radius = Math.min(95, pCell.radius + gain * 0.16);
+              addFeed(`Você devorou ${c.name} (+${gain} pts)! 💥`);
+              onAddCertcoins(0.25);
 
-        // Competitor Score / Mass tag
-        ctx.fillStyle = '#C8B8A0';
-        ctx.font = '9px monospace';
-        ctx.fillText(`${c.score} pts`, c.x, c.y + c.radius + 12);
+              // Respawn competitor safely
+              c.x = 200 + Math.random() * (WORLD_WIDTH - 400);
+              c.y = 200 + Math.random() * (WORLD_HEIGHT - 400);
+              c.score = 14 + Math.floor(Math.random() * 6);
+              c.radius = 16;
+            } else if (c.radius > pCell.radius * 1.1 && !shielded) {
+              // Competitor devours this player cell!
+              addFeed(`${c.name} devorou uma célula sua! 💔`);
+              playerCells.splice(pIdx, 1);
+              setPlayerCellsCount(playerCells.length);
+
+              if (playerCells.length === 0) {
+                isGameOver = true;
+                setAgarioGameOver(true);
+                const prize = currentTotalScore > 35 ? 1.0 : 0.5;
+                setAgarioWonCoins(prize);
+                onAddCertcoins(prize);
+                addFeed(`${c.name} eliminou você completamente!`);
+                break;
+              }
+            }
+          }
+        }
+
+        // Recombine Bot Splits: if parent and twin meet after cooldown
+        if (c.parentId) {
+          const parentBot = competitors.find((p) => p.id === c.parentId);
+          if (parentBot && now >= (c.canMergeAt || 0) && now >= (parentBot.canMergeAt || 0)) {
+            const d = Math.hypot(c.x - parentBot.x, c.y - parentBot.y);
+            if (d < c.radius + parentBot.radius) {
+              parentBot.radius = Math.min(85, Math.sqrt(parentBot.radius * parentBot.radius + c.radius * c.radius));
+              parentBot.score += c.score;
+              c.score = 0; // marked for removal
+            }
+          }
+        }
+
+        // Draw Competitor Ball (only if within camera view)
+        if (
+          c.x + c.radius >= cameraX &&
+          c.x - c.radius <= cameraX + screenWidth &&
+          c.y + c.radius >= cameraY &&
+          c.y - c.radius <= cameraY + screenHeight
+        ) {
+          ctx.beginPath();
+          ctx.arc(c.x, c.y, c.radius, 0, Math.PI * 2);
+          ctx.fillStyle = c.color;
+          ctx.fill();
+          ctx.lineWidth = 2.5;
+          ctx.strokeStyle = c.isOnline ? '#10B981' : '#ffffff';
+          ctx.stroke();
+          ctx.closePath();
+
+          ctx.fillStyle = '#F5E9D3';
+          ctx.font = 'bold 11px sans-serif';
+          ctx.textAlign = 'center';
+          const badge = c.isOnline ? ' 🟢' : '';
+          ctx.fillText(`${c.name}${badge}`, c.x, c.y - c.radius - 6);
+
+          ctx.fillStyle = '#C8B8A0';
+          ctx.font = '9px monospace';
+          ctx.fillText(`${c.score} pts`, c.x, c.y + c.radius + 12);
+        }
       });
 
-      // 8. Draw Player Ball (Highlighted in Gold / Glow)
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
-      ctx.fillStyle = estadoConfig.cor || '#E8A838';
-      ctx.shadowColor = estadoConfig.cor || '#E8A838';
-      ctx.shadowBlur = 10;
-      ctx.fill();
-      ctx.lineWidth = 3.5;
-      ctx.strokeStyle = '#FFFFFF';
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-      ctx.closePath();
+      // Filter out merged split bots and add new splits
+      competitors = competitors.filter((c) => c.score > 0);
+      if (newCompetitorSplits.length > 0) {
+        competitors = [...competitors, ...newCompetitorSplits];
+      }
 
-      // Player Name & Crown / Gold Badge
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 12px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(`⭐ ${player.name}`, player.x, player.y - player.radius - 8);
+      // 10. Draw Player Cells in World
+      playerCells.forEach((cell, idx) => {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cell.x, cell.y, cell.radius, 0, Math.PI * 2);
+        ctx.fillStyle = estadoConfig.cor || '#E8A838';
+        ctx.shadowColor = estadoConfig.cor || '#E8A838';
+        ctx.shadowBlur = 12;
+        ctx.fill();
+        ctx.lineWidth = 3.5;
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.closePath();
 
-      // Player Score label under ball
-      ctx.fillStyle = '#F5E9D3';
-      ctx.font = 'bold 10px monospace';
-      ctx.fillText(`${currentScore} pts`, player.x, player.y + player.radius + 14);
+        // Safe Spawn Shield Glow
+        if (shielded) {
+          ctx.beginPath();
+          ctx.arc(cell.x, cell.y, cell.radius + 7 + Math.sin(frameCount * 0.2) * 3, 0, Math.PI * 2);
+          ctx.strokeStyle = '#38BDF8';
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+          ctx.closePath();
+
+          ctx.fillStyle = '#38BDF8';
+          ctx.font = 'bold 9px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('🛡️ Seguro', cell.x, cell.y - cell.radius - 20);
+        }
+
+        // Recombine Timer Indicator
+        if (now < cell.canMergeAt) {
+          const remainingSec = Math.ceil((cell.canMergeAt - now) / 1000);
+          ctx.fillStyle = '#FDE68A';
+          ctx.font = 'bold 9px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(`Fusão em ${remainingSec}s`, cell.x, cell.y + cell.radius + 24);
+        }
+
+        // Name & Score Tag
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center';
+        const cellTag = playerCells.length > 1 ? ` (${idx + 1})` : '';
+        ctx.fillText(`⭐ ${currentUser.nome.split(' ')[0]}${cellTag}`, cell.x, cell.y - cell.radius - 7);
+
+        ctx.fillStyle = '#F5E9D3';
+        ctx.font = 'bold 10px monospace';
+        ctx.fillText(`${cell.score} pts`, cell.x, cell.y + cell.radius + 12);
+        ctx.restore();
+      });
+
+      // --- RESTORE CTX TO SCREEN SPACE ---
       ctx.restore();
 
-      // 9. Update Live Leaderboard array every 10 frames
+      // 11. Draw Minimap in Top-Left under Exit Button
+      const minimapW = 110;
+      const minimapH = 80;
+      const minimapX = 14;
+      const minimapY = 58;
+
+      ctx.save();
+      // Minimap background
+      ctx.fillStyle = 'rgba(18, 15, 13, 0.85)';
+      ctx.strokeStyle = '#382E24';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.roundRect(minimapX, minimapY, minimapW, minimapH, 10);
+      ctx.fill();
+      ctx.stroke();
+
+      // World scale factor
+      const scaleX = minimapW / WORLD_WIDTH;
+      const scaleY = minimapH / WORLD_HEIGHT;
+
+      // Draw Competitor dots on minimap
+      competitors.forEach((c) => {
+        const mx = minimapX + c.x * scaleX;
+        const my = minimapY + c.y * scaleY;
+        ctx.fillStyle = c.isOnline ? '#10B981' : '#A855F7';
+        ctx.beginPath();
+        ctx.arc(mx, my, 2, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Draw Player dot on minimap (Glowing Gold)
+      playerCells.forEach((c) => {
+        const mx = minimapX + c.x * scaleX;
+        const my = minimapY + c.y * scaleY;
+        ctx.fillStyle = '#E8A838';
+        ctx.shadowColor = '#E8A838';
+        ctx.shadowBlur = 4;
+        ctx.beginPath();
+        ctx.arc(mx, my, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      });
+
+      // Draw Camera Viewport Box on minimap
+      const camBoxX = minimapX + cameraX * scaleX;
+      const camBoxY = minimapY + cameraY * scaleY;
+      const camBoxW = screenWidth * scaleX;
+      const camBoxH = screenHeight * scaleY;
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(camBoxX, camBoxY, camBoxW, camBoxH);
+
+      ctx.fillStyle = '#C8B8A0';
+      ctx.font = '8px monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText('MAPA', minimapX + minimapW - 5, minimapY + 12);
+      ctx.restore();
+
+      // 12. Update Live Leaderboard
       if (frameCount % 10 === 0) {
         const allInRoom = [
-          { id: 'player', name: `${player.name} (Você)`, score: currentScore, isPlayer: true, isOnline: true },
+          {
+            id: 'player',
+            name: `${currentUser.nome.split(' ')[0]} (Você)`,
+            score: currentTotalScore,
+            isPlayer: true,
+            isOnline: true,
+          },
           ...competitors.map((c) => ({
             id: c.id,
             name: c.name,
@@ -574,10 +1245,10 @@ export const GamesView: React.FC<GamesViewProps> = ({
 
     return () => {
       cancelAnimationFrame(animationFrameId);
-      canvas.removeEventListener('mousemove', handleMouseMove);
-      canvas.removeEventListener('touchstart', handleTouchStart);
-      canvas.removeEventListener('touchmove', handleTouchMove);
-      canvas.removeEventListener('touchend', handleTouchEnd);
+      window.removeEventListener('resize', resizeCanvas);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      canvas.removeEventListener('touchmove', handleCanvasTouch);
     };
   }, [activeGame, currentUser, estadoConfig, isBoosting, onAddCertcoins, usuarios]);
 
@@ -599,17 +1270,16 @@ export const GamesView: React.FC<GamesViewProps> = ({
               Joguinhos & Arena ({estadoConfig.nome}) {estadoConfig.emblem}
             </h2>
             <p className="text-xs sm:text-sm text-[#C8B8A0] max-w-lg mx-auto leading-relaxed">
-              Jogue em tempo real com outras pessoas online da comunidade, suba no ranking ao vivo e acumule Certcoins para prosear e presentear!
+              Jogue no mapa gigante com câmera que segue seu personagem, joystick de alta sensibilidade, bots médios que se dividem e comem outros bots!
             </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            {/* Card Agar.io Arena */}
+            {/* Card Agar.io Arena Tela Cheia com Mapa Gigante */}
             <div
               onClick={() => {
                 setActiveGame('agario');
                 setAgarioGameOver(false);
-                setAgarioScore(10);
                 setKillFeed([]);
               }}
               className="bg-[#1E1915] hover:bg-[#2A231D] rounded-3xl p-6 border border-[#382E24] hover:border-[#E8A838]/60 cursor-pointer group transition-all flex flex-col justify-between shadow-lg"
@@ -617,28 +1287,33 @@ export const GamesView: React.FC<GamesViewProps> = ({
               <div>
                 <div
                   className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform border"
-                  style={{ backgroundColor: `${estadoConfig.cor}20`, borderColor: estadoConfig.cor, color: estadoConfig.cor }}
+                  style={{
+                    backgroundColor: `${estadoConfig.cor}20`,
+                    borderColor: estadoConfig.cor,
+                    color: estadoConfig.cor,
+                  }}
                 >
-                  <Sparkles className="w-6 h-6" />
+                  <Maximize2 className="w-6 h-6" />
                 </div>
                 <div className="flex items-center space-x-2 mb-1">
-                  <h3 className="text-lg font-black text-[#F5E9D3]">
-                    Arena Encontro Certo.io 🟢
-                  </h3>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                    Ao Vivo
+                  <h3 className="text-lg font-black text-[#F5E9D3]">Arena Encontro Certo.io 🟢</h3>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                    Mapa Gigante
                   </span>
                 </div>
                 <p className="text-xs text-[#C8B8A0] leading-relaxed">
-                  Controle sua bolinha no celular pelo toque, devore orbes, vença os bots e dispute o <strong>Top 1 do Ranking</strong> com pessoas online!
+                  Mapa gigante com <strong>câmera dinâmica</strong>, <strong>joystick ultra sensível</strong>, bots médios que se dividem e caçam outros bots, e botão de <strong>Dividir em 2</strong>!
                 </p>
               </div>
               <div
                 className="mt-6 pt-4 border-t border-[#382E24] flex items-center justify-between text-xs font-bold"
                 style={{ color: estadoConfig.cor }}
               >
-                <span>🏆 Ranking + Certcoins</span>
-                <span>Entrar na Arena →</span>
+                <span>🎮 Joystick + Câmera + Minimapa</span>
+                <span className="flex items-center space-x-1">
+                  <span>Entrar no Mundo</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </span>
               </div>
             </div>
 
@@ -648,19 +1323,14 @@ export const GamesView: React.FC<GamesViewProps> = ({
                 setActiveGame('memory');
                 startMemoryGame();
               }}
-              className="bg-[#1E1915] hover:bg-[#2A231D] rounded-3xl p-6 border border-[#382E24] hover:border-[#E8A838]/60 cursor-pointer group transition-all flex flex-col justify-between shadow-lg"
+              className="bg-[#1E1915] hover:bg-[#2A231D] rounded-3xl p-6 border border-[#382E24] hover:border-pink-500/50 cursor-pointer group transition-all flex flex-col justify-between shadow-lg"
             >
               <div>
-                <div
-                  className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform border"
-                  style={{ backgroundColor: '#EC489920', borderColor: '#EC4899', color: '#EC4899' }}
-                >
-                  <Heart className="w-6 h-6" />
+                <div className="w-12 h-12 rounded-2xl bg-pink-500/10 border border-pink-500/30 flex items-center justify-center mb-4 text-pink-400 group-hover:scale-110 transition-transform">
+                  <Sparkles className="w-6 h-6" />
                 </div>
                 <div className="flex items-center space-x-2 mb-1">
-                  <h3 className="text-lg font-black text-[#F5E9D3]">
-                    Jogo da Memória da Terra 🧠
-                  </h3>
+                  <h3 className="text-lg font-black text-[#F5E9D3]">Jogo da Memória da Terra 🧠</h3>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/30">
                     Cultural
                   </span>
@@ -678,168 +1348,245 @@ export const GamesView: React.FC<GamesViewProps> = ({
         </div>
       )}
 
-      {/* AGAR.IO ARENA VIEW COM CONTROLE MOBILE E RANKING AO VIVO */}
+      {/* AGAR.IO EM TELA CHEIA (FULLSCREEN IMMERSIVE) COM CÂMERA DINÂMICA E MAPA GIGANTE */}
       {activeGame === 'agario' && (
-        <div className="bg-[#1E1915] rounded-3xl p-4 sm:p-6 border border-[#382E24] shadow-2xl space-y-4">
-          {/* Top Bar: Voltar, Pontuação, Posição e Jogadores Online */}
-          <div className="flex flex-wrap items-center justify-between gap-2.5 pb-2 border-b border-[#382E24]">
+        <div
+          ref={containerRef}
+          className="fixed inset-0 z-50 bg-[#080605] w-screen h-screen overflow-hidden select-none touch-none flex flex-col"
+        >
+          {/* Canvas de Tela Cheia com Câmera que Segue o Personagem */}
+          <canvas
+            ref={canvasRef}
+            className="absolute inset-0 w-full h-full block cursor-crosshair z-0"
+            style={{ touchAction: 'none' }}
+          />
+
+          {/* TOP BAR FIXA: BOTÃO SAIR, STATUS E PONTUAÇÃO */}
+          <div className="relative z-30 p-3 sm:p-4 flex items-center justify-between pointer-events-none">
+            {/* Botão Sair do Jogo (canto superior esquerdo) */}
             <button
               onClick={() => setActiveGame('menu')}
-              className="px-3.5 py-2 bg-[#2A231D] hover:bg-[#382E24] text-xs font-bold rounded-xl text-[#F5E9D3] border border-[#382E24] transition-colors flex items-center space-x-1"
+              className="pointer-events-auto px-3.5 py-2 bg-[#1E1915]/90 hover:bg-red-950/60 active:scale-95 text-xs font-bold rounded-2xl text-[#F5E9D3] border border-[#382E24] hover:border-red-500/60 backdrop-blur-md transition-all flex items-center space-x-1.5 shadow-2xl"
             >
-              <ChevronLeft className="w-4 h-4" />
-              <span>Sair da Sala</span>
+              <X className="w-4 h-4 text-red-400" />
+              <span>Sair do Jogo</span>
             </button>
 
-            {/* Status Online na Sala */}
-            <div className="flex items-center space-x-2 text-xs font-bold text-[#C8B8A0] bg-[#120F0D] px-3 py-1.5 rounded-xl border border-[#382E24]">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span>{onlineCountInRoom} na arena ({estadoConfig.sigla})</span>
-            </div>
-
-            {/* Pontuação e Posição Atual */}
+            {/* Sala, Nível Médio e Escudo */}
             <div className="flex items-center space-x-2">
-              <div className="flex items-center space-x-1.5 bg-[#2A231D] px-3 py-1.5 rounded-xl border border-[#E8A838]/40 text-[#E8A838] font-black text-xs sm:text-sm">
-                <Coins className="w-4 h-4" />
-                <span>Pontos: {agarioScore}</span>
+              {isShieldActive && (
+                <div className="px-2.5 py-1 bg-cyan-950/80 border border-cyan-400/50 rounded-xl text-[10px] font-bold text-cyan-300 flex items-center space-x-1 animate-pulse backdrop-blur-sm shadow">
+                  <Shield className="w-3.5 h-3.5" />
+                  <span>Escudo Ativo</span>
+                </div>
+              )}
+
+              <div className="hidden xs:flex items-center space-x-1.5 text-[10px] font-bold text-amber-300 bg-amber-950/50 backdrop-blur-md px-2.5 py-1 rounded-xl border border-amber-500/30">
+                <span>Nível: Médio ⚔️</span>
               </div>
-              <div className="flex items-center space-x-1 bg-[#120F0D] px-2.5 py-1.5 rounded-xl border border-[#382E24] text-xs font-bold text-[#F5E9D3]">
+
+              <div className="flex items-center space-x-2 text-[11px] font-bold text-[#C8B8A0] bg-[#1E1915]/80 backdrop-blur-md px-3 py-1.5 rounded-xl border border-[#382E24]">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="hidden xs:inline">{onlineCountInRoom} na arena</span>
+                <span className="font-mono text-[#E8A838]">({estadoConfig.sigla})</span>
+              </div>
+            </div>
+
+            {/* Pontuação e Posição do Jogador */}
+            <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-1.5 bg-[#1E1915]/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-[#E8A838]/50 text-[#E8A838] font-black text-xs sm:text-sm shadow-lg">
+                <Coins className="w-4 h-4" />
+                <span>{totalPlayerScore} pts</span>
+              </div>
+
+              <div className="flex items-center space-x-1 bg-[#1E1915]/80 backdrop-blur-md px-2.5 py-1.5 rounded-xl border border-[#382E24] text-xs font-bold text-[#F5E9D3]">
                 <Crown className="w-3.5 h-3.5 text-yellow-400" />
-                <span>Top #{leaderboard.findIndex((p) => p.isPlayer) + 1 || 1}</span>
+                <span>#{leaderboard.findIndex((p) => p.isPlayer) + 1 || 1}</span>
               </div>
             </div>
           </div>
 
-          {/* Instrução rápida e clara de controle para Celular e Computador */}
-          <div className="text-[11px] text-[#C8B8A0] flex flex-wrap items-center justify-between gap-2 bg-[#120F0D] p-2.5 rounded-xl border border-[#382E24]">
-            <span className="flex items-center space-x-1.5">
-              <span>📱 <strong>No celular:</strong> Toque e arraste o dedo na tela para onde a bola deve ir!</span>
-            </span>
-            <span className="flex items-center space-x-1.5">
-              <span>💻 <strong>No PC:</strong> Movimente o cursor do mouse.</span>
-            </span>
+          {/* HUD DE RANKING AO VIVO (Canto Superior Direito) */}
+          <div className="absolute top-16 right-3 sm:right-4 z-20 bg-[#120F0D]/85 backdrop-blur-md border border-[#382E24] rounded-2xl p-2.5 sm:p-3 text-[11px] w-[145px] sm:w-[180px] shadow-2xl pointer-events-none space-y-1">
+            <div className="flex items-center justify-between border-b border-[#382E24] pb-1 text-[#E8A838] font-black text-[10px] uppercase tracking-wider">
+              <span className="flex items-center space-x-1">
+                <Trophy className="w-3 h-3 text-yellow-400" />
+                <span>Ranking</span>
+              </span>
+              <span className="text-[9px] text-emerald-400 font-mono">LIVE</span>
+            </div>
+
+            <div className="space-y-1 pt-0.5">
+              {leaderboard.slice(0, 5).map((entry, idx) => (
+                <div
+                  key={entry.id}
+                  className={`flex items-center justify-between text-[10px] px-1.5 py-0.5 rounded-md ${
+                    entry.isPlayer
+                      ? 'bg-[#E8A838]/25 text-[#F5E9D3] font-black border border-[#E8A838]/60'
+                      : 'text-[#C8B8A0]'
+                  }`}
+                >
+                  <span className="truncate max-w-[90px] flex items-center space-x-1">
+                    <span className="font-bold text-zinc-400">#{idx + 1}</span>
+                    <span className="truncate">{entry.name}</span>
+                    {entry.isOnline && !entry.isPlayer && (
+                      <span className="text-[8px] text-emerald-400">🟢</span>
+                    )}
+                  </span>
+                  <span className="font-mono font-bold text-[#E8A838] shrink-0 ml-1">
+                    {entry.score}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
 
-          {/* Arena Canvas Container com HUD de Ranking Sobreposto */}
-          <div className="relative w-full rounded-2xl overflow-hidden bg-[#0A0807] border-2 border-[#382E24] shadow-inner flex justify-center">
-            <canvas
-              ref={canvasRef}
-              width={680}
-              height={440}
-              className="w-full max-w-full h-auto cursor-crosshair block select-none"
-              style={{ touchAction: 'none' }}
-            />
+          {/* KILL FEED DE NOTIFICAÇÕES (Embaixo do minimapa) */}
+          {killFeed.length > 0 && (
+            <div className="absolute top-38 left-3 sm:left-4 z-20 space-y-1 pointer-events-none max-w-[210px]">
+              {killFeed.map((msg, i) => (
+                <div
+                  key={i}
+                  className="bg-[#120F0D]/85 backdrop-blur-xs border border-[#382E24] text-[10px] px-2.5 py-1 rounded-xl text-[#F5E9D3] shadow-md animate-fadeIn"
+                >
+                  {msg}
+                </div>
+              ))}
+            </div>
+          )}
 
-            {/* HUD de Ranking em Tempo Real (Canto Superior Direito) */}
-            <div className="absolute top-2.5 right-2.5 bg-[#120F0D]/90 backdrop-blur-md border border-[#382E24] rounded-2xl p-2.5 sm:p-3 text-[11px] max-w-[170px] sm:max-w-[200px] shadow-2xl pointer-events-none space-y-1.5">
-              <div className="flex items-center justify-between border-b border-[#382E24] pb-1 text-[#E8A838] font-black text-[10px] uppercase tracking-wider">
-                <span className="flex items-center space-x-1">
-                  <Trophy className="w-3 h-3 text-yellow-400" />
-                  <span>Ranking da Sala</span>
+          {/* ÁREA INFERIOR DE CONTROLES: DIVIDIR À ESQUERDA | JOYSTICK SENSÍVEL À DIREITA */}
+          <div className="absolute bottom-4 sm:bottom-6 left-0 right-0 px-4 sm:px-6 flex items-end justify-between pointer-events-none z-30">
+            {/* LADO ESQUERDO: BOTÕES DE DIVIDIR EM 2 E TURBO */}
+            <div className="flex flex-col items-center space-y-3 pointer-events-auto">
+              {/* Botão Turbo */}
+              <button
+                onMouseDown={() => setIsBoosting(true)}
+                onMouseUp={() => setIsBoosting(false)}
+                onTouchStart={(e) => {
+                  e.stopPropagation();
+                  setIsBoosting(true);
+                }}
+                onTouchEnd={(e) => {
+                  e.stopPropagation();
+                  setIsBoosting(false);
+                }}
+                className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex flex-col items-center justify-center font-black transition-all shadow-2xl active:scale-95 border backdrop-blur-md ${
+                  isBoosting
+                    ? 'bg-amber-500 text-black border-amber-300 scale-105'
+                    : 'bg-[#1E1915]/90 text-[#F5E9D3] border-[#382E24] hover:border-amber-400/50'
+                }`}
+                title="Acelera a bolinha"
+              >
+                <Zap className={`w-5 h-5 ${isBoosting ? 'fill-black text-black' : 'text-amber-400'}`} />
+                <span className="text-[9px] mt-0.5">Turbo</span>
+              </button>
+
+              {/* Botão Dividir em 2 (Split) */}
+              <button
+                onClick={handleTriggerSplit}
+                onTouchStart={(e) => {
+                  e.stopPropagation();
+                  handleTriggerSplit();
+                }}
+                disabled={totalPlayerScore < 16 && playerCellsCount <= 1}
+                className={`w-20 h-20 sm:w-24 sm:h-24 rounded-3xl flex flex-col items-center justify-center font-black transition-all shadow-2xl active:scale-95 border backdrop-blur-md ${
+                  totalPlayerScore >= 16 || playerCellsCount > 1
+                    ? 'bg-gradient-to-br from-purple-900/90 to-indigo-900/90 text-white border-purple-400 hover:border-purple-300 shadow-purple-900/40'
+                    : 'bg-[#1E1915]/60 text-zinc-500 border-[#382E24] opacity-50 cursor-not-allowed'
+                }`}
+                title="Dividir bolinha em duas partes"
+              >
+                <Scissors className="w-6 h-6 sm:w-7 sm:h-7 text-purple-300 mb-0.5" />
+                <span className="text-[10px] sm:text-[11px] font-black tracking-wider">DIVIDIR</span>
+                <span className="text-[8px] opacity-80 font-mono">
+                  {playerCellsCount > 1 ? `${playerCellsCount}/8 partes` : '2x'}
                 </span>
-                <span className="text-[9px] text-emerald-400 font-mono">LIVE</span>
+              </button>
+            </div>
+
+            {/* Dica central sutil de controle */}
+            <div className="hidden md:flex flex-col items-center text-[11px] text-[#C8B8A0] bg-[#120F0D]/80 px-3 py-1.5 rounded-xl border border-[#382E24] pointer-events-none mb-2 shadow">
+              <span>🎮 <strong>Joystick sensível</strong> guia a câmera pelo mundo gigante</span>
+              <span>⚔️ Bots inteligentes comem outros bots e podem se dividir!</span>
+            </div>
+
+            {/* LADO DIREITO: JOYSTICK ULTRA SENSÍVEL */}
+            <div className="flex flex-col items-center pointer-events-auto">
+              <div
+                ref={joystickBaseRef}
+                onMouseDown={handleJoystickTouchStart}
+                onMouseMove={(e) => {
+                  if (joystickKnob.active) handleJoystickMove(e);
+                }}
+                onMouseUp={handleJoystickEnd}
+                onMouseLeave={handleJoystickEnd}
+                onTouchStart={handleJoystickTouchStart}
+                onTouchMove={handleJoystickMove}
+                onTouchEnd={handleJoystickEnd}
+                className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-[#1E1915]/85 backdrop-blur-md border-2 border-[#E8A838]/50 shadow-2xl flex items-center justify-center touch-none select-none cursor-grab active:cursor-grabbing"
+              >
+                {/* Cruz central de mira */}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-25">
+                  <div className="w-full h-[1px] bg-amber-400" />
+                  <div className="absolute h-full w-[1px] bg-amber-400" />
+                </div>
+
+                {/* Knob móvel do Joystick */}
+                <div
+                  className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 border-2 border-white shadow-xl flex items-center justify-center pointer-events-none transition-transform duration-75"
+                  style={{
+                    transform: `translate(${joystickKnob.x}px, ${joystickKnob.y}px)`,
+                  }}
+                >
+                  <Crosshair className="w-5 h-5 text-black" />
+                </div>
+              </div>
+              <span className="text-[10px] font-bold text-[#E8A838] mt-1 tracking-wider uppercase">
+                Joystick (Sensível)
+              </span>
+            </div>
+          </div>
+
+          {/* MODAL DE FIM DE PARTIDA (GAME OVER) */}
+          {agarioGameOver && (
+            <div className="absolute inset-0 bg-black/85 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center space-y-4 animate-fadeIn z-40">
+              <div
+                className="w-16 h-16 rounded-full flex items-center justify-center mx-auto shadow-2xl border"
+                style={{ backgroundColor: `${estadoConfig.cor}25`, borderColor: estadoConfig.cor }}
+              >
+                <Trophy className="w-8 h-8 text-yellow-400 animate-bounce" />
               </div>
 
               <div className="space-y-1">
-                {leaderboard.slice(0, 5).map((entry, idx) => (
-                  <div
-                    key={entry.id}
-                    className={`flex items-center justify-between text-[10px] px-1.5 py-0.5 rounded-md ${
-                      entry.isPlayer
-                        ? 'bg-[#E8A838]/20 text-[#F5E9D3] font-black border border-[#E8A838]/50'
-                        : 'text-[#C8B8A0]'
-                    }`}
-                  >
-                    <span className="truncate max-w-[100px] flex items-center space-x-1">
-                      <span className="font-bold text-zinc-400">#{idx + 1}</span>
-                      <span className="truncate">{entry.name}</span>
-                      {entry.isOnline && !entry.isPlayer && (
-                        <span className="text-[8px] text-emerald-400">🟢</span>
-                      )}
-                    </span>
-                    <span className="font-mono font-bold text-[#E8A838] shrink-0 ml-1">
-                      {entry.score}
-                    </span>
-                  </div>
-                ))}
+                <h3 className="text-2xl sm:text-3xl font-black text-[#F5E9D3]">Eita! Fim de Partida!</h3>
+                <p className="text-xs sm:text-sm text-[#C8B8A0]">
+                  Você alcançou <strong>{totalPlayerScore} pontos</strong> e faturou{' '}
+                  <strong className="text-[#E8A838]">+{agarioWonCoins.toFixed(2)} Certcoins</strong> 🪙
+                </p>
               </div>
-            </div>
 
-            {/* Kill Feed / Avisos de Eliminação (Canto Superior Esquerdo) */}
-            {killFeed.length > 0 && (
-              <div className="absolute top-2.5 left-2.5 space-y-1 pointer-events-none">
-                {killFeed.map((msg, i) => (
-                  <div
-                    key={i}
-                    className="bg-[#120F0D]/85 backdrop-blur-xs border border-[#382E24] text-[10px] px-2.5 py-1 rounded-xl text-[#F5E9D3] animate-fadeIn shadow"
-                  >
-                    {msg}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Modal de Fim de Partida */}
-            {agarioGameOver && (
-              <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center space-y-4 animate-fadeIn">
-                <div
-                  className="w-16 h-16 rounded-full flex items-center justify-center mx-auto shadow-2xl border"
-                  style={{ backgroundColor: `${estadoConfig.cor}25`, borderColor: estadoConfig.cor }}
+              <div className="flex items-center space-x-3 pt-3">
+                <button
+                  onClick={() => {
+                    setAgarioGameOver(false);
+                    setKillFeed([]);
+                    setActiveGame('menu');
+                    setTimeout(() => setActiveGame('agario'), 50);
+                  }}
+                  className="px-6 py-3 golden-button rounded-xl text-xs sm:text-sm font-black shadow-lg transition-transform active:scale-95"
                 >
-                  <Trophy className="w-8 h-8 text-yellow-400 animate-bounce" />
-                </div>
-                <div className="space-y-1">
-                  <h3 className="text-2xl font-black text-[#F5E9D3]">Eita! Fim de Partida!</h3>
-                  <p className="text-xs text-[#C8B8A0]">
-                    Você alcançou <strong>{agarioScore} pontos</strong> e faturou{' '}
-                    <strong className="text-[#E8A838]">+{agarioWonCoins.toFixed(2)} Certcoins</strong> 🪙
-                  </p>
-                </div>
-
-                <div className="flex items-center space-x-3 pt-2">
-                  <button
-                    onClick={() => {
-                      setAgarioGameOver(false);
-                      setAgarioScore(10);
-                      setKillFeed([]);
-                    }}
-                    className="px-6 py-3 golden-button rounded-xl text-xs sm:text-sm font-black shadow-lg transition-transform active:scale-95"
-                  >
-                    Jogar de Novo 🚀
-                  </button>
-                  <button
-                    onClick={() => setActiveGame('menu')}
-                    className="px-4 py-3 bg-[#2A231D] text-[#C8B8A0] hover:text-[#F5E9D3] rounded-xl text-xs font-bold border border-[#382E24]"
-                  >
-                    Voltar ao Menu
-                  </button>
-                </div>
+                  Jogar de Novo 🚀
+                </button>
+                <button
+                  onClick={() => setActiveGame('menu')}
+                  className="px-4 py-3 bg-[#2A231D] text-[#C8B8A0] hover:text-[#F5E9D3] rounded-xl text-xs font-bold border border-[#382E24]"
+                >
+                  Voltar ao Menu
+                </button>
               </div>
-            )}
-          </div>
-
-          {/* Botão de Turbo / Impulso para Mobile e Dica */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-            <div className="flex items-center space-x-2 text-xs text-[#C8B8A0]">
-              <Shield className="w-4 h-4 text-[#E8A838]" />
-              <span>Devore bolinhas e adversários menores para crescer e pontuar!</span>
             </div>
-
-            <button
-              onMouseDown={() => setIsBoosting(true)}
-              onMouseUp={() => setIsBoosting(false)}
-              onTouchStart={() => setIsBoosting(true)}
-              onTouchEnd={() => setIsBoosting(false)}
-              className={`w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center space-x-1.5 shadow active:scale-95 border ${
-                isBoosting
-                  ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-[#120F0D] border-amber-400'
-                  : 'bg-[#2A231D] text-[#F5E9D3] border-[#382E24] hover:border-[#E8A838]/50'
-              }`}
-            >
-              <Zap className={`w-4 h-4 ${isBoosting ? 'text-[#120F0D] fill-[#120F0D]' : 'text-[#E8A838]'}`} />
-              <span>{isBoosting ? 'Turbo Ativado! ⚡' : 'Segurar para Turbo ⚡'}</span>
-            </button>
-          </div>
+          )}
         </div>
       )}
 
@@ -872,24 +1619,24 @@ export const GamesView: React.FC<GamesViewProps> = ({
                   setMemoryPhase((p) => p + 1);
                   startMemoryGame();
                 }}
-                className="px-6 py-3 golden-button font-black rounded-xl text-xs sm:text-sm shadow-md"
+                className="px-6 py-3 golden-button rounded-xl font-black text-xs sm:text-sm shadow-lg active:scale-95"
               >
-                Próxima Fase 🚀
+                Próxima Fase ({memoryPhase + 1}) 🚀
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-4 gap-2.5 max-w-md mx-auto">
+            <div className="grid grid-cols-4 gap-3 max-w-md mx-auto">
               {memoryCards.map((card) => (
                 <div
                   key={card.id}
                   onClick={() => handleCardClick(card.id)}
-                  className={`h-20 sm:h-24 rounded-2xl flex items-center justify-center text-3xl font-black cursor-pointer transition-transform duration-200 shadow-md ${
+                  className={`aspect-square rounded-2xl flex items-center justify-center text-2xl sm:text-3xl font-black cursor-pointer transition-all border ${
                     card.flipped || card.matched
-                      ? 'bg-[#2A231D] border-2 border-[#E8A838] text-[#F5E9D3] scale-100'
-                      : 'bg-[#120F0D] border border-[#382E24] text-[#C8B8A0] hover:border-[#E8A838]/60 active:scale-95'
+                      ? 'bg-[#2A231D] border-[#E8A838] text-white shadow-md'
+                      : 'bg-[#120F0D] border-[#382E24] text-[#E8A838] hover:border-[#E8A838]/60 hover:scale-105'
                   }`}
                 >
-                  {card.flipped || card.matched ? card.symbol : '☕'}
+                  {card.flipped || card.matched ? card.symbol : '❓'}
                 </div>
               ))}
             </div>
