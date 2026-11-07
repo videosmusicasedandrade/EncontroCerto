@@ -145,12 +145,11 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Right Actions: State Selector, Certcoins, Notifications, Settings, Profile */}
           <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
-            {/* State Selector Compact Dropdown */}
-            <StateSelector
-              currentEstadoSigla={estadoConfig.sigla}
-              onSelectEstado={onSelectEstado}
-              compact={true}
-            />
+            {/* State Indicator */}
+            <div className="flex items-center space-x-1 bg-[#120F0D] px-3 py-1.5 rounded-full border border-[#382E24] text-[#E8A838] font-bold text-xs">
+              <MapPin className="w-3 h-3" />
+              <span>{estadoConfig.nome}</span>
+            </div>
 
             {/* Certcoins Pill */}
             <button

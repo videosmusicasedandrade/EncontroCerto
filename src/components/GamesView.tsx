@@ -20,6 +20,7 @@ import {
   Music,
 } from 'lucide-react';
 import { UserProfile, EstadoConfig } from '../types';
+import { ChessView } from './ChessView';
 
 interface GamesViewProps {
   currentUser: UserProfile;
@@ -201,7 +202,7 @@ export const GamesView: React.FC<GamesViewProps & { activeTab: string }> = ({
   onAddCertcoins,
   activeTab,
 }) => {
-  const [activeGame, setActiveGame] = useState<'menu' | 'agario' | 'memory'>('menu');
+  const [activeGame, setActiveGame] = useState<'menu' | 'agario' | 'chess'>('menu');
 
   // --- AGAR.IO STATE ---
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -219,6 +220,29 @@ export const GamesView: React.FC<GamesViewProps & { activeTab: string }> = ({
   const isBoostingRef = useRef<boolean>(false);
   const [playerCellsCount, setPlayerCellsCount] = useState(1);
   const [isShieldActive, setIsShieldActive] = useState(true);
+  const [mapDominanceCount, setMapDominanceCount] = useState(0);
+
+  // Som de comer agradável e instigante (instante)
+  const playEatSound = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, now); // Alto e agradável
+      gain.gain.setValueAtTime(0.05, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.1);
+    } catch (e) {}
+  };
 
   // PNL Audio Engine ref
   const pnlAudioRef = useRef<PnlAudioEngine | null>(null);
@@ -251,13 +275,18 @@ export const GamesView: React.FC<GamesViewProps & { activeTab: string }> = ({
     const handleVisibilityChange = () => {
       if (document.hidden && pnlAudioRef.current) {
         pnlAudioRef.current.stop();
-        setIsMusicPlaying(false);
+      } else if (!document.hidden && activeGame === 'agario' && activeTab === 'games' && isMusicPlaying) {
+        if (!pnlAudioRef.current) pnlAudioRef.current = new PnlAudioEngine();
+        pnlAudioRef.current.start();
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    // Também escuta por foco na janela
+    window.addEventListener('blur', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
 
-    if (activeGame === 'agario' && activeTab === 'games' && isMusicPlaying) {
+    if (activeGame === 'agario' && activeTab === 'games' && isMusicPlaying && !document.hidden) {
       if (!pnlAudioRef.current) {
         pnlAudioRef.current = new PnlAudioEngine();
       }
@@ -269,69 +298,15 @@ export const GamesView: React.FC<GamesViewProps & { activeTab: string }> = ({
     }
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
       if (pnlAudioRef.current) {
         pnlAudioRef.current.stop();
       }
     };
   }, [activeGame, activeTab, isMusicPlaying]);
 
-  // --- MEMORY GAME STATE ---
-  const [memoryCards, setMemoryCards] = useState<{ id: number; symbol: string; flipped: boolean; matched: boolean }[]>([]);
-  const [flippedCards, setFlippedCards] = useState<number[]>([]);
-  const [memoryPhase, setMemoryPhase] = useState(1);
-  const [memoryWon, setMemoryWon] = useState(false);
 
-  const startMemoryGame = () => {
-    const symbols =
-      estadoConfig.emojisGame && estadoConfig.emojisGame.length >= 6
-        ? estadoConfig.emojisGame
-        : ['🧀', '☕', '⛪', '🎸', '🏖️', estadoConfig.emblem];
-    const deck = [...symbols, ...symbols]
-      .sort(() => Math.random() - 0.5)
-      .map((symbol, index) => ({ id: index, symbol, flipped: false, matched: false }));
-    setMemoryCards(deck);
-    setFlippedCards([]);
-    setMemoryWon(false);
-  };
-
-  const handleCardClick = (id: number) => {
-    if (flippedCards.length === 2) return;
-    const clicked = memoryCards.find((c) => c.id === id);
-    if (!clicked || clicked.flipped || clicked.matched) return;
-
-    const newCards = memoryCards.map((c) => (c.id === id ? { ...c, flipped: true } : c));
-    setMemoryCards(newCards);
-    const newFlipped = [...flippedCards, id];
-    setFlippedCards(newFlipped);
-
-    if (newFlipped.length === 2) {
-      const [firstId, secondId] = newFlipped;
-      const firstCard = memoryCards.find((c) => c.id === firstId);
-      const secondCard = memoryCards.find((c) => c.id === secondId);
-
-      if (firstCard && secondCard && firstCard.symbol === secondCard.symbol) {
-        setMemoryCards((prev) =>
-          prev.map((c) => (c.id === firstId || c.id === secondId ? { ...c, matched: true } : c))
-        );
-        setFlippedCards([]);
-
-        setTimeout(() => {
-          const allMatched = newCards.every((c) => c.matched || c.id === firstId || c.id === secondId);
-          if (allMatched) {
-            setMemoryWon(true);
-            onAddCertcoins(0.5);
-          }
-        }, 300);
-      } else {
-        setTimeout(() => {
-          setMemoryCards((prev) =>
-            prev.map((c) => (c.id === firstId || c.id === secondId ? { ...c, flipped: false } : c))
-          );
-          setFlippedCards([]);
-        }, 800);
-      }
-    }
-  };
 
   // High Sensitivity Joystick touch handlers (Right hand)
   const handleJoystickTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
@@ -746,6 +721,28 @@ export const GamesView: React.FC<GamesViewProps & { activeTab: string }> = ({
         ctx.stroke();
       }
 
+      // Papel de parede cheio de emoticons de romance (corações, amor, flores) bem visíveis
+      ctx.save();
+      ctx.globalAlpha = 0.55; // Visibilidade clara e vibrante de papel de parede
+      ctx.font = '26px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      const bgEmojis = ['❤️', '💖', '💘', '💕', '🌸', '🌹', '✨', '💌', '💞', '🌺', '💐', '💓'];
+      const bgGridStep = 80; // Padronagem densa de papel de parede
+      const startX = Math.max(0, Math.floor(cameraX / bgGridStep) * bgGridStep);
+      const endX = Math.min(WORLD_WIDTH, cameraX + screenWidth + bgGridStep);
+      const startY = Math.max(0, Math.floor(cameraY / bgGridStep) * bgGridStep);
+      const endY = Math.min(WORLD_HEIGHT, cameraY + screenHeight + bgGridStep);
+
+      for (let x = startX; x <= endX; x += bgGridStep) {
+        for (let y = startY; y <= endY; y += bgGridStep) {
+          const emojiIdx = Math.abs(Math.floor((x * 41 + y * 23) / bgGridStep)) % bgEmojis.length;
+          ctx.fillText(bgEmojis[emojiIdx], x + 40, y + 40);
+        }
+      }
+      ctx.restore();
+
       // World Outer Boundary Walls
       ctx.strokeStyle = '#E8A838';
       ctx.lineWidth = 6;
@@ -981,8 +978,17 @@ export const GamesView: React.FC<GamesViewProps & { activeTab: string }> = ({
         for (let fi = foods.length - 1; fi >= 0; fi--) {
           const f = foods[fi];
           if (Math.hypot(cell.x - f.x, cell.y - f.y) < cell.radius + f.radius) {
+            playEatSound();
             cell.score += 1;
             cell.radius = Math.min(80, cell.radius + 0.16);
+            
+            // Vitória ao atingir tamanho do mapa (exemplo: score 200)
+            if (cell.score >= 200) {
+              setMapDominanceCount(prev => prev + 1);
+              setAgarioGameOver(true);
+              setAgarioWonCoins(5);
+              onAddCertcoins(5);
+            }
 
             foods[fi] = {
               id: Date.now() + fi,
@@ -1358,14 +1364,20 @@ export const GamesView: React.FC<GamesViewProps & { activeTab: string }> = ({
         ctx.save();
         ctx.beginPath();
         ctx.arc(cell.x, cell.y, cell.radius, 0, Math.PI * 2);
-        ctx.fillStyle = estadoConfig.cor || '#E8A838';
-        ctx.shadowColor = estadoConfig.cor || '#E8A838';
-        ctx.shadowBlur = cell.isMain ? 14 : 6;
-        ctx.fill();
-        ctx.lineWidth = cell.isMain ? 3.5 : 2;
-        ctx.strokeStyle = cell.isMain ? '#FFFFFF' : 'rgba(255, 255, 255, 0.8)';
+        ctx.clip(); // Clip to circle
+
+        // Draw profile picture
+        const img = new Image();
+        img.src = currentUser.foto;
+        ctx.drawImage(img, cell.x - cell.radius, cell.y - cell.radius, cell.radius * 2, cell.radius * 2);
+        ctx.restore();
+
+        // Draw Border
+        ctx.beginPath();
+        ctx.arc(cell.x, cell.y, cell.radius, 0, Math.PI * 2);
+        ctx.lineWidth = cell.isMain ? 4 : 2;
+        ctx.strokeStyle = '#FFFFFF';
         ctx.stroke();
-        ctx.shadowBlur = 0;
         ctx.closePath();
 
         // Efeito visual de Turbo / Chamas de Propulsão ao fugir ou acelerar
@@ -1383,35 +1395,15 @@ export const GamesView: React.FC<GamesViewProps & { activeTab: string }> = ({
           ctx.restore();
         }
 
-        // Safe Spawn Shield Glow
-        if (shielded) {
-          ctx.beginPath();
-          ctx.arc(cell.x, cell.y, cell.radius + 7 + Math.sin(frameCount * 0.2) * 3, 0, Math.PI * 2);
-          ctx.strokeStyle = '#38BDF8';
-          ctx.lineWidth = 2.5;
-          ctx.stroke();
-          ctx.closePath();
-
-          ctx.fillStyle = '#38BDF8';
-          ctx.font = 'bold 9px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillText('🛡️ Seguro', cell.x, cell.y - cell.radius - 20);
-        }
-
         // Nome & Tag identificando Célula Principal ou Parte Voltando
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = cell.isMain ? 'bold 11px sans-serif' : '9px sans-serif';
+        ctx.font = cell.isMain ? 'bold 12px sans-serif' : '10px sans-serif';
         ctx.textAlign = 'center';
-        if (cell.isMain) {
-          ctx.fillText(`👑 ${currentUser.nome.split(' ')[0]} (Principal)`, cell.x, cell.y - cell.radius - 7);
-        } else {
-          ctx.fillText(`⚡ Voltando (${idx})`, cell.x, cell.y - cell.radius - 5);
-        }
+        ctx.fillText(currentUser.nome.split(' ')[0], cell.x, cell.y - cell.radius - 8);
 
         ctx.fillStyle = '#F5E9D3';
         ctx.font = 'bold 10px monospace';
         ctx.fillText(`${cell.score} pts`, cell.x, cell.y + cell.radius + 12);
-        ctx.restore();
       });
 
       // --- RESTORE CTX TO SCREEN SPACE ---
@@ -1437,25 +1429,27 @@ export const GamesView: React.FC<GamesViewProps & { activeTab: string }> = ({
       const scaleX = minimapW / WORLD_WIDTH;
       const scaleY = minimapH / WORLD_HEIGHT;
 
-      // Draw Competitor dots on minimap
+      // Draw Competitor dots on minimap (scales as competitor grows)
       competitors.forEach((c) => {
         const mx = minimapX + c.x * scaleX;
         const my = minimapY + c.y * scaleY;
         ctx.fillStyle = c.isOnline ? '#10B981' : '#A855F7';
+        const compDotRadius = Math.max(2, Math.min(8, c.radius * scaleX * 1.8));
         ctx.beginPath();
-        ctx.arc(mx, my, 2, 0, Math.PI * 2);
+        ctx.arc(mx, my, compDotRadius, 0, Math.PI * 2);
         ctx.fill();
       });
 
-      // Draw Player dot on minimap (Glowing Gold)
+      // Draw Player dot on minimap (Glowing Gold, scales as player grows!)
       playerCells.forEach((c) => {
         const mx = minimapX + c.x * scaleX;
         const my = minimapY + c.y * scaleY;
         ctx.fillStyle = '#E8A838';
         ctx.shadowColor = '#E8A838';
-        ctx.shadowBlur = 4;
+        ctx.shadowBlur = 6;
+        const playerDotRadius = Math.max(3.5, Math.min(12, c.radius * scaleX * 2.2));
         ctx.beginPath();
-        ctx.arc(mx, my, 3.5, 0, Math.PI * 2);
+        ctx.arc(mx, my, playerDotRadius, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
       });
@@ -1535,85 +1529,60 @@ export const GamesView: React.FC<GamesViewProps & { activeTab: string }> = ({
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            {/* Card Agar.io Arena Tela Cheia com Mapa Gigante */}
+          <div className="flex flex-col sm:flex-row justify-center gap-4">
+            {/* Card Certboll */}
             <div
               onClick={() => {
                 setActiveGame('agario');
                 setAgarioGameOver(false);
                 setKillFeed([]);
+                setTotalPlayerScore(10);
               }}
-              className="bg-[#1E1915] hover:bg-[#2A231D] rounded-3xl p-6 border border-[#382E24] hover:border-[#E8A838]/60 cursor-pointer group transition-all flex flex-col justify-between shadow-lg"
+              className="bg-[#1E1915] hover:bg-[#2A231D] rounded-3xl p-6 border border-[#382E24] hover:border-[#E8A838]/60 cursor-pointer group transition-all flex flex-col justify-center items-center shadow-lg w-full max-w-xs"
             >
-              <div>
-                <div
-                  className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform border"
-                  style={{
-                    backgroundColor: `${estadoConfig.cor}20`,
-                    borderColor: estadoConfig.cor,
-                    color: estadoConfig.cor,
-                  }}
-                >
-                  <Maximize2 className="w-6 h-6" />
-                </div>
-                <div className="flex items-center space-x-2 mb-1">
-                  <h3 className="text-lg font-black text-[#F5E9D3]">Arena Encontro Certo.io 🟢</h3>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
-                    Mapa Gigante
-                  </span>
-                </div>
-                <p className="text-xs text-[#C8B8A0] leading-relaxed">
-                  Mapa gigante com <strong>câmera dinâmica</strong>, <strong>joystick ultra sensível</strong>, bots médios que se dividem e caçam outros bots, e botão de <strong>Dividir em 2</strong>!
-                </p>
-              </div>
               <div
-                className="mt-6 pt-4 border-t border-[#382E24] flex items-center justify-between text-xs font-bold"
-                style={{ color: estadoConfig.cor }}
+                className="w-16 h-16 rounded-3xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform border"
+                style={{
+                  backgroundColor: `${estadoConfig.cor}20`,
+                  borderColor: estadoConfig.cor,
+                  color: estadoConfig.cor,
+                }}
               >
-                <span>🎮 Joystick + Câmera + Minimapa</span>
-                <span className="flex items-center space-x-1">
-                  <span>Entrar no Mundo</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </span>
+                <Gamepad2 className="w-8 h-8" />
+              </div>
+              <h3 className="text-xl font-black text-[#F5E9D3] mb-4">Certball</h3>
+              <div className="text-xs font-bold text-[#C8B8A0] flex items-center space-x-2">
+                <span>Dominações: {mapDominanceCount}</span>
               </div>
             </div>
 
-            {/* Card Jogo da Memória */}
+            {/* Card Xadrez */}
             <div
-              onClick={() => {
-                setActiveGame('memory');
-                startMemoryGame();
-              }}
-              className="bg-[#1E1915] hover:bg-[#2A231D] rounded-3xl p-6 border border-[#382E24] hover:border-pink-500/50 cursor-pointer group transition-all flex flex-col justify-between shadow-lg"
+              onClick={() => setActiveGame('chess')}
+              className="bg-[#1E1915] hover:bg-[#2A231D] rounded-3xl p-6 border border-[#382E24] hover:border-purple-500/60 cursor-pointer group transition-all flex flex-col justify-center items-center shadow-lg w-full max-w-xs"
             >
-              <div>
-                <div className="w-12 h-12 rounded-2xl bg-pink-500/10 border border-pink-500/30 flex items-center justify-center mb-4 text-pink-400 group-hover:scale-110 transition-transform">
-                  <Sparkles className="w-6 h-6" />
-                </div>
-                <div className="flex items-center space-x-2 mb-1">
-                  <h3 className="text-lg font-black text-[#F5E9D3]">Jogo da Memória da Terra 🧠</h3>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/30">
-                    Cultural
-                  </span>
-                </div>
-                <p className="text-xs text-[#C8B8A0] leading-relaxed">
-                  Encontre os pares com símbolos e costumes de {estadoConfig.nome} e ganhe +0.50 Certcoin por cada fase concluída.
-                </p>
+              <div className="w-16 h-16 rounded-3xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform border border-purple-500/30 bg-purple-500/10 text-purple-400">
+                <Trophy className="w-8 h-8" />
               </div>
-              <div className="mt-6 pt-4 border-t border-[#382E24] flex items-center justify-between text-xs font-bold text-pink-400">
-                <span>Prêmio +0.50 Certcoin</span>
-                <span>Jogar Agora →</span>
+              <h3 className="text-xl font-black text-[#F5E9D3] mb-4">Xadrez 1x1</h3>
+              <div className="text-xs font-bold text-[#C8B8A0]">
+                <span>Aposte Certcoins</span>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* AGAR.IO EM TELA CHEIA (FULLSCREEN IMMERSIVE) COM CÂMERA DINÂMICA E MAPA GIGANTE */}
+      {/* XADREZ */}
+      {activeGame === 'chess' && (
+        <div className="fixed inset-0 z-50 bg-[#120F0D] w-screen h-screen">
+            <ChessView currentUser={currentUser} usuarios={usuarios || []} onAddCertcoins={onAddCertcoins} />
+        </div>
+      )}
       {activeGame === 'agario' && (
         <div
           ref={containerRef}
-          className="fixed inset-0 z-50 bg-[#080605] w-screen h-screen overflow-hidden select-none touch-none flex flex-col"
+          className="fixed inset-0 z-50 bg-[#080605] w-screen h-screen overflow-hidden select-none touch-none flex flex-col pt-[env(safe-area-inset-top)]"
         >
           {/* Canvas de Tela Cheia com Câmera que Segue o Personagem */}
           <canvas
@@ -1638,6 +1607,20 @@ export const GamesView: React.FC<GamesViewProps & { activeTab: string }> = ({
               </button>
 
               <button
+                onClick={() => {
+                  if (!document.fullscreenElement) {
+                    containerRef.current?.requestFullscreen().catch(console.error);
+                  } else {
+                    document.exitFullscreen().catch(console.error);
+                  }
+                }}
+                className="px-3 py-2 bg-[#1E1915]/90 hover:bg-[#2A231D] active:scale-95 text-xs font-bold rounded-2xl border border-[#382E24] backdrop-blur-md transition-all shadow-xl text-[#F5E9D3]"
+                title="Tela Cheia"
+              >
+                <Maximize2 className="w-4 h-4" />
+              </button>
+
+              <button
                 onClick={toggleMusic}
                 className="px-3 py-2 bg-[#1E1915]/90 hover:bg-[#2A231D] active:scale-95 text-xs font-bold rounded-2xl border border-[#382E24] backdrop-blur-md transition-all flex items-center space-x-1.5 shadow-xl text-[#F5E9D3]"
                 title="Música PNL Relaxante (Frequências 432Hz/528Hz)"
@@ -1645,7 +1628,7 @@ export const GamesView: React.FC<GamesViewProps & { activeTab: string }> = ({
                 {isMusicPlaying ? (
                   <>
                     <Volume2 className="w-4 h-4 text-emerald-400 animate-pulse" />
-                    <span className="hidden xs:inline text-emerald-400 text-[11px]">PNL 432Hz</span>
+                    <span className="hidden xs:inline text-emerald-400 text-[11px]">PNL</span>
                   </>
                 ) : (
                   <>
@@ -1725,13 +1708,13 @@ export const GamesView: React.FC<GamesViewProps & { activeTab: string }> = ({
             </div>
           </div>
 
-          {/* KILL FEED DE NOTIFICAÇÕES (Embaixo do minimapa) */}
+          {/* KILL FEED DE NOTIFICAÇÕES (Canto direito elevado, perfeitamente legível sem sobreposição) */}
           {killFeed.length > 0 && (
-            <div className="absolute top-38 left-3 sm:left-4 z-20 space-y-1 pointer-events-none max-w-[210px]">
+            <div className="absolute bottom-28 sm:bottom-32 right-3 sm:right-6 z-20 space-y-1.5 pointer-events-none max-w-[170px] sm:max-w-[210px] flex flex-col items-end">
               {killFeed.map((msg, i) => (
                 <div
                   key={i}
-                  className="bg-[#120F0D]/85 backdrop-blur-xs border border-[#382E24] text-[10px] px-2.5 py-1 rounded-xl text-[#F5E9D3] shadow-md animate-fadeIn"
+                  className="bg-[#120F0D]/95 backdrop-blur-md border border-[#E8A838]/40 text-[9px] sm:text-[10px] px-2.5 py-1 rounded-xl text-[#F5E9D3] shadow-2xl animate-fadeIn text-right font-bold"
                 >
                   {msg}
                 </div>
@@ -1739,11 +1722,11 @@ export const GamesView: React.FC<GamesViewProps & { activeTab: string }> = ({
             </div>
           )}
 
-          {/* ÁREA INFERIOR DE CONTROLES: DIVIDIR À ESQUERDA | JOYSTICK SENSÍVEL À DIREITA */}
-          <div className="absolute bottom-4 sm:bottom-6 left-0 right-0 px-4 sm:px-6 flex items-end justify-between pointer-events-none z-30">
-            {/* LADO ESQUERDO: BOTÕES DE DIVIDIR EM 2 E TURBO */}
-            <div className="flex flex-col items-center space-y-3 pointer-events-auto">
-              {/* Botão Turbo */}
+          {/* ÁREA INFERIOR DE CONTROLES */}
+          <div className="absolute bottom-6 sm:bottom-8 left-3 sm:left-6 right-3 sm:right-6 flex items-end justify-between pointer-events-none z-30">
+            {/* LADO ESQUERDO: BOTÃO TURBO EM CIMA E BOTÃO DIVIDIR EM BAIXO */}
+            <div className="flex flex-col items-center space-y-2.5 sm:space-y-3 pointer-events-auto">
+              {/* Botão Turbo (Em Cima) */}
               <button
                 onMouseDown={() => {
                   isBoostingRef.current = true;
@@ -1775,7 +1758,7 @@ export const GamesView: React.FC<GamesViewProps & { activeTab: string }> = ({
                 <span className="text-[7px] opacity-75 font-mono">-1 pt</span>
               </button>
 
-              {/* Botão Dividir em 2, 4, 8... (Split) */}
+              {/* Botão Dividir (Em Baixo, no lugar do Turbo) */}
               <button
                 onClick={handleTriggerSplit}
                 onTouchStart={(e) => {
@@ -1783,14 +1766,14 @@ export const GamesView: React.FC<GamesViewProps & { activeTab: string }> = ({
                   handleTriggerSplit();
                 }}
                 disabled={totalPlayerScore < 12 && playerCellsCount <= 1}
-                className={`w-20 h-20 sm:w-24 sm:h-24 rounded-3xl flex flex-col items-center justify-center font-black transition-all shadow-2xl active:scale-95 border backdrop-blur-md ${
+                className={`w-18 h-18 sm:w-20 sm:h-20 rounded-2xl sm:rounded-3xl flex flex-col items-center justify-center font-black transition-all shadow-2xl active:scale-95 border backdrop-blur-md ${
                   totalPlayerScore >= 12 || playerCellsCount > 1
                     ? 'bg-gradient-to-br from-purple-900/90 to-indigo-900/90 text-white border-purple-400 hover:border-purple-300 shadow-purple-900/40'
                     : 'bg-[#1E1915]/60 text-zinc-500 border-[#382E24] opacity-50 cursor-not-allowed'
                 }`}
                 title="Dividir bolinha: a principal vai para frente e as outras voltam para ela"
               >
-                <Scissors className="w-6 h-6 sm:w-7 sm:h-7 text-purple-300 mb-0.5" />
+                <Scissors className="w-5 h-5 sm:w-6 sm:h-6 text-purple-300 mb-0.5" />
                 <span className="text-[10px] sm:text-[11px] font-black tracking-wider">DIVIDIR</span>
                 <span className="text-[8px] opacity-80 font-mono">
                   {playerCellsCount > 1 ? `${playerCellsCount} partes` : '2x / 4x'}
@@ -1798,14 +1781,8 @@ export const GamesView: React.FC<GamesViewProps & { activeTab: string }> = ({
               </button>
             </div>
 
-            {/* Dica central sutil de controle */}
-            <div className="hidden md:flex flex-col items-center text-[11px] text-[#C8B8A0] bg-[#120F0D]/80 px-3 py-1.5 rounded-xl border border-[#382E24] pointer-events-none mb-2 shadow">
-              <span>👑 Você controla a <strong>Célula Principal</strong>; as outras partes a seguem e se juntam ao tocar!</span>
-              <span>✂️ Ao dividir, a principal avança na direção apontada e a metade fica para trás voltando.</span>
-            </div>
-
-            {/* LADO DIREITO: JOYSTICK ULTRA SENSÍVEL */}
-            <div className="flex flex-col items-center pointer-events-auto">
+            {/* MEIO BAIXO: JOYSTICK ULTRA SENSÍVEL CENTRALIZADO */}
+            <div className="absolute left-1/2 -translate-x-1/2 bottom-2 sm:bottom-3 flex flex-col items-center pointer-events-auto">
               <div
                 ref={joystickBaseRef}
                 onMouseDown={handleJoystickTouchStart}
@@ -1835,9 +1812,6 @@ export const GamesView: React.FC<GamesViewProps & { activeTab: string }> = ({
                   <Crosshair className="w-5 h-5 text-black" />
                 </div>
               </div>
-              <span className="text-[10px] font-bold text-[#E8A838] mt-1 tracking-wider uppercase">
-                Joystick (Sensível)
-              </span>
             </div>
           </div>
 
@@ -1883,59 +1857,7 @@ export const GamesView: React.FC<GamesViewProps & { activeTab: string }> = ({
         </div>
       )}
 
-      {/* JOGO DA MEMÓRIA VIEW */}
-      {activeGame === 'memory' && (
-        <div className="bg-[#1E1915] rounded-3xl p-6 border border-[#382E24] text-center space-y-6 max-w-xl mx-auto shadow-xl">
-          <div className="flex items-center justify-between border-b border-[#382E24] pb-3">
-            <button
-              onClick={() => setActiveGame('menu')}
-              className="px-3.5 py-1.5 bg-[#2A231D] hover:bg-[#382E24] text-xs font-bold rounded-xl text-[#F5E9D3] border border-[#382E24]"
-            >
-              ← Menu
-            </button>
-            <h3 className="font-extrabold text-base text-[#F5E9D3] flex items-center space-x-1.5">
-              <span>Fase {memoryPhase}</span>
-              <span>•</span>
-              <span className="text-[#E8A838]">{estadoConfig.nome}</span>
-            </h3>
-          </div>
 
-          {memoryWon ? (
-            <div className="py-10 space-y-4 animate-fadeIn">
-              <Trophy className="w-16 h-16 mx-auto text-yellow-400 animate-bounce" />
-              <h3 className="text-2xl font-black text-[#F5E9D3]">Parabéns! Fase Concluída!</h3>
-              <p className="text-xs text-[#C8B8A0]">
-                Você ganhou <strong className="text-[#E8A838]">+0.50 Certcoin</strong> para aproveitar na comunidade!
-              </p>
-              <button
-                onClick={() => {
-                  setMemoryPhase((p) => p + 1);
-                  startMemoryGame();
-                }}
-                className="px-6 py-3 golden-button rounded-xl font-black text-xs sm:text-sm shadow-lg active:scale-95"
-              >
-                Próxima Fase ({memoryPhase + 1}) 🚀
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-4 gap-3 max-w-md mx-auto">
-              {memoryCards.map((card) => (
-                <div
-                  key={card.id}
-                  onClick={() => handleCardClick(card.id)}
-                  className={`aspect-square rounded-2xl flex items-center justify-center text-2xl sm:text-3xl font-black cursor-pointer transition-all border ${
-                    card.flipped || card.matched
-                      ? 'bg-[#2A231D] border-[#E8A838] text-white shadow-md'
-                      : 'bg-[#120F0D] border-[#382E24] text-[#E8A838] hover:border-[#E8A838]/60 hover:scale-105'
-                  }`}
-                >
-                  {card.flipped || card.matched ? card.symbol : '❓'}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 };

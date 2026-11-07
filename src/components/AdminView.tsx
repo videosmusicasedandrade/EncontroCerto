@@ -26,7 +26,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
 
   // Send certcoins state
   const [targetUserId, setTargetUserId] = useState('');
-  const [certQtd, setCertQtd] = useState(15);
+  const [certQtd, setCertQtd] = useState(100);
   const [sendSuccess, setSendSuccess] = useState(false);
 
   const totalTemp = lotes.filter((l) => l.tipo === 'temp').reduce((acc, l) => acc + l.quantidade, 0);
@@ -46,7 +46,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
     setTimeout(() => {
       setSendSuccess(false);
       setTargetUserId('');
-    }, 3000);
+    }, 2000);
   };
 
   return (
@@ -285,6 +285,76 @@ export const AdminView: React.FC<AdminViewProps> = ({
                 Confirmar Banimento
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* User Management List */}
+      {activeTab === 'usuarios' && (
+        <div className="bg-[#1E1915] rounded-3xl p-6 border border-[#382E24] shadow-lg">
+          <h3 className="text-xl font-black mb-4 flex items-center space-x-2">
+            <Users className="text-purple-400" />
+            <span>Gerenciamento de Usuários</span>
+          </h3>
+          <input
+            type="text"
+            placeholder="Buscar por nome ou cidade..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-[#120F0D] border border-[#382E24] rounded-2xl px-4 py-3 text-sm mb-4"
+          />
+          <div className="space-y-2">
+            {filteredUsers.map(u => (
+              <div key={u.id} className="flex items-center justify-between bg-[#120F0D] p-3 rounded-xl border border-[#382E24]">
+                <div className="flex items-center space-x-3">
+                  <img src={u.foto} alt={u.nome} className="w-10 h-10 rounded-full object-cover"/>
+                  <div>
+                    <p className="font-bold">{u.nome}</p>
+                    <p className="text-xs text-zinc-400">{u.cidade} - {u.estado_sigla}</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => { setActiveTab('enviar_certcoins'); setTargetUserId(u.id); }}
+                  className="bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold"
+                >
+                  Dar Coins
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {/* User Management List */}
+      {activeTab === 'usuarios' && (
+        <div className="bg-[#1E1915] rounded-3xl p-6 border border-[#382E24] shadow-lg">
+          <h3 className="text-xl font-black mb-4 flex items-center space-x-2">
+            <Users className="text-purple-400" />
+            <span>Gerenciamento de Usuários</span>
+          </h3>
+          <input
+            type="text"
+            placeholder="Buscar por nome ou cidade..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-[#120F0D] border border-[#382E24] rounded-2xl px-4 py-3 text-sm mb-4"
+          />
+          <div className="space-y-2">
+            {filteredUsers.map(u => (
+              <div key={u.id} className="flex items-center justify-between bg-[#120F0D] p-3 rounded-xl border border-[#382E24]">
+                <div className="flex items-center space-x-3">
+                  <img src={u.foto} alt={u.nome} className="w-10 h-10 rounded-full object-cover"/>
+                  <div>
+                    <p className="font-bold">{u.nome}</p>
+                    <p className="text-xs text-zinc-400">{u.cidade} - {u.estado_sigla}</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => { setActiveTab('enviar_certcoins'); setTargetUserId(u.id); }}
+                  className="bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold"
+                >
+                  Dar Coins
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       )}
