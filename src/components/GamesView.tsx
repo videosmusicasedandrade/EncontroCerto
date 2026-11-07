@@ -15,6 +15,9 @@ import {
   ArrowRight,
   Crosshair,
   MapPin,
+  Volume2,
+  VolumeX,
+  Music,
 } from 'lucide-react';
 import { UserProfile, EstadoConfig } from '../types';
 
@@ -34,8 +37,10 @@ interface PlayerCell {
   vy: number;
   ejectVx: number;
   ejectVy: number;
-  canMergeAt: number; // timestamp when this cell can re-merge
+  canMergeAt: number;
   score: number;
+  isMain: boolean;
+  spawnDelay?: number;
 }
 
 interface Competitor {
@@ -72,6 +77,123 @@ interface FoodPellet {
 const WORLD_WIDTH = 3200;
 const WORLD_HEIGHT = 2400;
 
+// Motor de Música Relaxante e Viciante baseado em PNL (Programação Neuro-Linguística & Frequências 432Hz / 528Hz)
+class PnlAudioEngine {
+  private ctx: AudioContext | null = null;
+  private isPlaying = false;
+  private intervalId: any = null;
+  private masterGain: GainNode | null = null;
+  private droneOscL: OscillatorNode | null = null;
+  private droneOscR: OscillatorNode | null = null;
+
+  start() {
+    if (this.isPlaying && this.ctx && this.ctx.state === 'running') return;
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      if (!this.ctx || this.ctx.state === 'closed') {
+        this.ctx = new AudioCtx();
+      }
+      if (this.ctx.state === 'suspended') {
+        this.ctx.resume();
+      }
+
+      this.masterGain = this.ctx.createGain();
+      this.masterGain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+      this.masterGain.connect(this.ctx.destination);
+
+      // Binaural Theta Flow State: 432 Hz Left / 438 Hz Right (6 Hz difference)
+      const merger = this.ctx.createChannelMerger(2);
+
+      this.droneOscL = this.ctx.createOscillator();
+      this.droneOscL.type = 'sine';
+      this.droneOscL.frequency.setValueAtTime(216, this.ctx.currentTime); // 432 Hz sub-octave root
+      const gainL = this.ctx.createGain();
+      gainL.gain.setValueAtTime(0.035, this.ctx.currentTime);
+      this.droneOscL.connect(gainL);
+      gainL.connect(merger, 0, 0);
+
+      this.droneOscR = this.ctx.createOscillator();
+      this.droneOscR.type = 'sine';
+      this.droneOscR.frequency.setValueAtTime(222, this.ctx.currentTime); // 6 Hz Theta differential
+      const gainR = this.ctx.createGain();
+      gainR.gain.setValueAtTime(0.035, this.ctx.currentTime);
+      this.droneOscR.connect(gainR);
+      gainR.connect(merger, 0, 1);
+
+      merger.connect(this.masterGain);
+      this.droneOscL.start();
+      this.droneOscR.start();
+
+      // Relaxing & Addictive Solfeggio / Pentatonic chime sequence (216, 288, 324, 432, 528, 648 Hz)
+      const frequencies = [216, 288, 324, 432, 528, 648];
+      let noteIndex = 0;
+
+      this.intervalId = setInterval(() => {
+        if (!this.ctx || this.ctx.state === 'suspended' || this.ctx.state === 'closed') return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const noteGain = this.ctx.createGain();
+
+        osc.type = 'sine';
+        const freq = frequencies[noteIndex % frequencies.length];
+        noteIndex = (noteIndex + 1 + Math.floor(Math.random() * 2)) % frequencies.length;
+        osc.frequency.setValueAtTime(freq, now);
+
+        noteGain.gain.setValueAtTime(0.001, now);
+        noteGain.gain.exponentialRampToValueAtTime(0.03, now + 0.12);
+        noteGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.8);
+
+        osc.connect(noteGain);
+        if (this.masterGain) {
+          noteGain.connect(this.masterGain);
+        }
+
+        osc.start(now);
+        osc.stop(now + 1.9);
+      }, 1200);
+
+      this.isPlaying = true;
+    } catch (e) {
+      console.warn('Audio not available:', e);
+    }
+  }
+
+  stop() {
+    this.isPlaying = false;
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+    if (this.droneOscL) {
+      try { this.droneOscL.stop(); } catch (e) {}
+      this.droneOscL = null;
+    }
+    if (this.droneOscR) {
+      try { this.droneOscR.stop(); } catch (e) {}
+      this.droneOscR = null;
+    }
+    if (this.ctx && this.ctx.state !== 'closed') {
+      try { this.ctx.close(); } catch (e) {}
+      this.ctx = null;
+    }
+  }
+
+  toggle() {
+    if (this.isPlaying) {
+      this.stop();
+      return false;
+    } else {
+      this.start();
+      return true;
+    }
+  }
+
+  getIsPlaying() {
+    return this.isPlaying;
+  }
+}
+
 export const GamesView: React.FC<GamesViewProps> = ({
   currentUser,
   estadoConfig,
@@ -92,9 +214,14 @@ export const GamesView: React.FC<GamesViewProps> = ({
   >([]);
   const [killFeed, setKillFeed] = useState<string[]>([]);
   const [onlineCountInRoom, setOnlineCountInRoom] = useState(8);
-  const [isBoosting, setIsBoosting] = useState(false);
+  const [isBoostingUI, setIsBoostingUI] = useState(false);
+  const isBoostingRef = useRef<boolean>(false);
   const [playerCellsCount, setPlayerCellsCount] = useState(1);
   const [isShieldActive, setIsShieldActive] = useState(true);
+
+  // PNL Audio Engine ref
+  const pnlAudioRef = useRef<PnlAudioEngine | null>(null);
+  const [isMusicPlaying, setIsMusicPlaying] = useState(true);
 
   // Direction vector (-1 to 1) controlled by responsive joystick or keyboard
   const directionRef = useRef<{ x: number; y: number; active: boolean }>({ x: 0, y: 0, active: false });
@@ -108,6 +235,34 @@ export const GamesView: React.FC<GamesViewProps> = ({
     y: 0,
     active: false,
   });
+
+  // Alterna música relaxante PNL
+  const toggleMusic = () => {
+    if (!pnlAudioRef.current) {
+      pnlAudioRef.current = new PnlAudioEngine();
+    }
+    const playing = pnlAudioRef.current.toggle();
+    setIsMusicPlaying(playing);
+  };
+
+  // Gerencia ciclo de vida do áudio relaxante PNL
+  useEffect(() => {
+    if (activeGame === 'agario' && isMusicPlaying) {
+      if (!pnlAudioRef.current) {
+        pnlAudioRef.current = new PnlAudioEngine();
+      }
+      pnlAudioRef.current.start();
+    } else {
+      if (pnlAudioRef.current) {
+        pnlAudioRef.current.stop();
+      }
+    }
+    return () => {
+      if (pnlAudioRef.current) {
+        pnlAudioRef.current.stop();
+      }
+    };
+  }, [activeGame, isMusicPlaying]);
 
   // --- MEMORY GAME STATE ---
   const [memoryCards, setMemoryCards] = useState<{ id: number; symbol: string; flipped: boolean; matched: boolean }[]>([]);
@@ -413,7 +568,7 @@ export const GamesView: React.FC<GamesViewProps> = ({
 
     const initialSpawn = findSafeSpawn();
 
-    // Initial Player with 1 cell
+    // Initial Player with 1 cell (isMain = true)
     let playerCells: PlayerCell[] = [
       {
         id: 'cell-0',
@@ -426,6 +581,7 @@ export const GamesView: React.FC<GamesViewProps> = ({
         ejectVy: 0,
         canMergeAt: 0,
         score: 10,
+        isMain: true,
       },
     ];
 
@@ -528,29 +684,20 @@ export const GamesView: React.FC<GamesViewProps> = ({
     const update = () => {
       if (isGameOver) return;
       frameCount++;
+      const now = Date.now();
       screenWidth = canvas.width;
       screenHeight = canvas.height;
 
       // Update Shield state
-      const shielded = Date.now() < shieldUntil;
+      const shielded = now < shieldUntil;
       if (isShieldActive !== shielded) {
         setIsShieldActive(shielded);
       }
 
-      // 1. Calculate Player Center of Mass for Smooth Camera Follow
-      let pCenterX = 0;
-      let pCenterY = 0;
-      if (playerCells.length > 0) {
-        playerCells.forEach((c) => {
-          pCenterX += c.x;
-          pCenterY += c.y;
-        });
-        pCenterX /= playerCells.length;
-        pCenterY /= playerCells.length;
-      } else {
-        pCenterX = WORLD_WIDTH / 2;
-        pCenterY = WORLD_HEIGHT / 2;
-      }
+      // 1. Calculate Player Principal Cell for Smooth Camera Follow
+      const currentMain = playerCells.find((c) => c.isMain) || playerCells[0];
+      const pCenterX = currentMain ? currentMain.x : WORLD_WIDTH / 2;
+      const pCenterY = currentMain ? currentMain.y : WORLD_HEIGHT / 2;
 
       // Smooth camera interpolation towards player center
       const targetCamX = pCenterX - screenWidth / 2;
@@ -620,7 +767,7 @@ export const GamesView: React.FC<GamesViewProps> = ({
         ctx.closePath();
       });
 
-      // 4. Handle Player Split in Two (Dividir em dois!)
+      // 4. Handle Player Split (Dividir em 2, 4, 8 ou mais!)
       if (splitRequestedRef.current) {
         splitRequestedRef.current = false;
         const currentDir = directionRef.current;
@@ -640,79 +787,194 @@ export const GamesView: React.FC<GamesViewProps> = ({
         let didSplit = false;
 
         playerCells.forEach((cell) => {
-          if (cell.radius >= 17 && playerCells.length + newCells.length < 8) {
+          // Can divide if score >= 10 or radius >= 13, up to 16 total parts
+          if (cell.radius >= 13 && playerCells.length + newCells.length < 16) {
             didSplit = true;
-            const splitRadius = Math.max(12, cell.radius * 0.71);
+            const splitRadius = Math.max(10, cell.radius * 0.71);
             const halfScore = Math.max(5, Math.floor(cell.score / 2));
-            const mergeCooldown = Date.now() + 14000;
 
             cell.radius = splitRadius;
             cell.score = halfScore;
-            cell.canMergeAt = mergeCooldown;
 
-            newCells.push({
-              id: `cell-${Date.now()}-${Math.random()}`,
-              x: cell.x + launchDirX * (splitRadius * 1.5),
-              y: cell.y + launchDirY * (splitRadius * 1.5),
-              radius: splitRadius,
-              vx: launchDirX * 3.5,
-              vy: launchDirY * 3.5,
-              ejectVx: launchDirX * 15, // Snappy ejection boost!
-              ejectVy: launchDirY * 15,
-              canMergeAt: mergeCooldown,
-              score: halfScore,
-            });
+            if (cell.isMain) {
+              // A principal se projeta para frente na direção apontada pelo joystick!
+              cell.ejectVx = launchDirX * 18;
+              cell.ejectVy = launchDirY * 18;
+
+              // A outra metade fica para trás com recuo inicial, depois volta seguindo a principal
+              newCells.push({
+                id: `cell-${Date.now()}-${Math.random()}`,
+                x: cell.x - launchDirX * (splitRadius * 2.2),
+                y: cell.y - launchDirY * (splitRadius * 2.2),
+                radius: splitRadius,
+                vx: 0,
+                vy: 0,
+                ejectVx: -launchDirX * 4,
+                ejectVy: -launchDirY * 4,
+                canMergeAt: 0,
+                score: halfScore,
+                isMain: false,
+                spawnDelay: 10,
+              });
+            } else {
+              // Subdivisão de células secundárias (2 -> 4 -> 8...)
+              newCells.push({
+                id: `cell-${Date.now()}-${Math.random()}`,
+                x: cell.x - launchDirX * (splitRadius * 1.6),
+                y: cell.y - launchDirY * (splitRadius * 1.6),
+                radius: splitRadius,
+                vx: 0,
+                vy: 0,
+                ejectVx: -launchDirX * 3,
+                ejectVy: -launchDirY * 3,
+                canMergeAt: 0,
+                score: halfScore,
+                isMain: false,
+                spawnDelay: 8,
+              });
+            }
           }
         });
 
         if (didSplit) {
           playerCells = [...playerCells, ...newCells];
           setPlayerCellsCount(playerCells.length);
-          addFeed('➗ Você se dividiu em dois!');
+          addFeed(`➗ Dividido em ${playerCells.length} partes!`);
         }
       }
 
-      // 5. Update and Move Player Cells with High Joystick Sensitivity & Speed
+      // 5. Update and Move Player Cells
+      // A pessoa controla diretamente a Célula Principal; as outras partes seguem a principal mais rápido!
       const dir = directionRef.current;
-      const boost = boostRequestedRef.current || isBoosting;
-      const baseSpeed = boost ? 6.2 : 4.4;
 
-      playerCells.forEach((cell) => {
-        cell.ejectVx *= 0.88;
-        cell.ejectVy *= 0.88;
-        if (Math.hypot(cell.ejectVx, cell.ejectVy) < 0.1) {
-          cell.ejectVx = 0;
-          cell.ejectVy = 0;
+      // Localiza a célula principal
+      let mainCell = playerCells.find((c) => c.isMain) || playerCells[0];
+      if (mainCell && !mainCell.isMain) {
+        mainCell.isMain = true;
+      }
+
+      // TURBO: gasta pontos para correr mais rápido enquanto pressiona!
+      // Usado para escapar de adversários maiores ou perseguir alvos
+      const boostActive = isBoostingRef.current || boostRequestedRef.current;
+      const canBoost = Boolean(boostActive && mainCell && mainCell.score > 8);
+
+      if (canBoost && mainCell) {
+        // Gasta 1 ponto a cada 14 frames (~4x por segundo) enquanto turbo está ativo
+        if (frameCount % 14 === 0 && mainCell.score > 8) {
+          mainCell.score -= 1;
+          mainCell.radius = Math.max(12, 12 + mainCell.score * 0.28);
+          setTotalPlayerScore(playerCells.reduce((sum, c) => sum + c.score, 0));
+
+          // Efeito Agar.io: ejeta massa para trás como impulso!
+          const dirLen = Math.hypot(mainCell.vx, mainCell.vy) || 1;
+          foods.push({
+            id: Date.now() + Math.random(),
+            x: mainCell.x - (mainCell.vx / dirLen) * (mainCell.radius + 6),
+            y: mainCell.y - (mainCell.vy / dirLen) * (mainCell.radius + 6),
+            radius: 3.5,
+            color: estadoConfig.cor || '#E8A838',
+          });
+        }
+      }
+
+      // Velocidade Base: Normal 4.2 | Turbo 8.0 (Quase o dobro da velocidade!)
+      const baseSpeed = canBoost ? 8.0 : 4.2;
+
+      // 5A. Movimenta a Célula Principal através do Joystick
+      if (mainCell) {
+        mainCell.ejectVx *= 0.88;
+        mainCell.ejectVy *= 0.88;
+        if (Math.hypot(mainCell.ejectVx, mainCell.ejectVy) < 0.1) {
+          mainCell.ejectVx = 0;
+          mainCell.ejectVy = 0;
         }
 
-        const massFactor = Math.max(0.68, 1 - (cell.radius - 12) * 0.011);
-        const cellSpeed = baseSpeed * massFactor;
+        // Penalidade de Massa: bolinhas maiores ficam bem mais lentas; bolinhas menores com turbo conseguem escapar fácil!
+        const massFactor = Math.max(0.48, 1 - (mainCell.radius - 12) * 0.013);
+        const mainSpeed = baseSpeed * massFactor;
 
         if (dir.active) {
-          cell.vx = dir.x * cellSpeed;
-          cell.vy = dir.y * cellSpeed;
+          mainCell.vx = dir.x * mainSpeed;
+          mainCell.vy = dir.y * mainSpeed;
         } else {
-          cell.vx *= 0.85;
-          cell.vy *= 0.85;
+          mainCell.vx *= 0.85;
+          mainCell.vy *= 0.85;
         }
 
-        cell.x += cell.vx + cell.ejectVx;
-        cell.y += cell.vy + cell.ejectVy;
+        mainCell.x += mainCell.vx + mainCell.ejectVx;
+        mainCell.y += mainCell.vy + mainCell.ejectVy;
 
-        // Keep inside World Boundaries
-        cell.x = Math.max(cell.radius + 6, Math.min(WORLD_WIDTH - cell.radius - 6, cell.x));
-        cell.y = Math.max(cell.radius + 6, Math.min(WORLD_HEIGHT - cell.radius - 6, cell.y));
+        mainCell.x = Math.max(mainCell.radius + 6, Math.min(WORLD_WIDTH - mainCell.radius - 6, mainCell.x));
+        mainCell.y = Math.max(mainCell.radius + 6, Math.min(WORLD_HEIGHT - mainCell.radius - 6, mainCell.y));
+      }
 
-        // Eat Food Pellets
-        for (let i = foods.length - 1; i >= 0; i--) {
-          const f = foods[i];
+      // 5B. Partes secundárias seguem a principal MAIS RÁPIDO e entram para dentro dela ao se encontrarem
+      if (mainCell) {
+        for (let i = playerCells.length - 1; i >= 0; i--) {
+          const subCell = playerCells[i];
+          if (!subCell || subCell === mainCell || subCell.isMain) continue;
+
+          subCell.ejectVx *= 0.88;
+          subCell.ejectVy *= 0.88;
+          if (Math.hypot(subCell.ejectVx, subCell.ejectVy) < 0.1) {
+            subCell.ejectVx = 0;
+            subCell.ejectVy = 0;
+          }
+
+          if (subCell.spawnDelay && subCell.spawnDelay > 0) {
+            subCell.spawnDelay--;
+            subCell.x += subCell.ejectVx;
+            subCell.y += subCell.ejectVy;
+          } else {
+            const dx = mainCell.x - subCell.x;
+            const dy = mainCell.y - subCell.y;
+            const dist = Math.hypot(dx, dy);
+
+            // "seguindo ela mais rápido q a principal"
+            const followSpeed = baseSpeed * 1.5 + 1.2;
+
+            if (dist > 2) {
+              subCell.vx = (dx / dist) * followSpeed;
+              subCell.vy = (dy / dist) * followSpeed;
+            }
+
+            subCell.x += subCell.vx + subCell.ejectVx;
+            subCell.y += subCell.vy + subCell.ejectVy;
+
+            // "quando se encontrar elas se juntam e vão entrando uma dentro da outra"
+            const touchDistance = mainCell.radius + subCell.radius;
+            if (dist < touchDistance) {
+              // Atrai para o centro da principal
+              subCell.x += (mainCell.x - subCell.x) * 0.45;
+              subCell.y += (mainCell.y - subCell.y) * 0.45;
+
+              // Entrando para dentro da principal: fusão completa!
+              if (dist < mainCell.radius * 0.8 + subCell.radius * 0.25 || dist < 24) {
+                mainCell.score += subCell.score;
+                mainCell.radius = Math.min(105, Math.sqrt(mainCell.radius * mainCell.radius + subCell.radius * subCell.radius));
+                playerCells.splice(i, 1);
+                setPlayerCellsCount(playerCells.length);
+                addFeed('✨ Parte absorvida de volta na principal!');
+                continue;
+              }
+            }
+          }
+
+          subCell.x = Math.max(subCell.radius + 6, Math.min(WORLD_WIDTH - subCell.radius - 6, subCell.x));
+          subCell.y = Math.max(subCell.radius + 6, Math.min(WORLD_HEIGHT - subCell.radius - 6, subCell.y));
+        }
+      }
+
+      // 5C. Todas as células do jogador coletam orbes de energia
+      playerCells.forEach((cell) => {
+        for (let fi = foods.length - 1; fi >= 0; fi--) {
+          const f = foods[fi];
           if (Math.hypot(cell.x - f.x, cell.y - f.y) < cell.radius + f.radius) {
             cell.score += 1;
-            cell.radius = Math.min(75, 12 + cell.score * 0.28);
+            cell.radius = Math.min(80, cell.radius + 0.16);
 
-            // Respawn food in random location across the whole world
-            foods[i] = {
-              id: Date.now() + i,
+            foods[fi] = {
+              id: Date.now() + fi,
               x: 40 + Math.random() * (WORLD_WIDTH - 80),
               y: 40 + Math.random() * (WORLD_HEIGHT - 80),
               radius: 4,
@@ -723,52 +985,6 @@ export const GamesView: React.FC<GamesViewProps> = ({
           }
         }
       });
-
-      // 6. Player Cells Collision & Gradual Recombining ("entrando uma dentro da outra")
-      const now = Date.now();
-      for (let i = 0; i < playerCells.length; i++) {
-        for (let j = i + 1; j < playerCells.length; j++) {
-          const a = playerCells[i];
-          const b = playerCells[j];
-          if (!a || !b) continue;
-
-          const dx = b.x - a.x;
-          const dy = b.y - a.y;
-          const dist = Math.hypot(dx, dy);
-          const totalRadius = a.radius + b.radius;
-
-          if (dist < totalRadius) {
-            const canMerge = now >= a.canMergeAt && now >= b.canMergeAt;
-
-            if (canMerge) {
-              const pullFactor = 0.16;
-              a.x += dx * pullFactor * 0.5;
-              a.y += dy * pullFactor * 0.5;
-              b.x -= dx * pullFactor * 0.5;
-              b.y -= dy * pullFactor * 0.5;
-
-              if (dist < Math.max(a.radius, b.radius) * 0.75) {
-                a.radius = Math.min(95, Math.sqrt(a.radius * a.radius + b.radius * b.radius));
-                a.score += b.score;
-                playerCells.splice(j, 1);
-                j--;
-                addFeed('✨ Suas células se fundiram de volta!');
-                setPlayerCellsCount(playerCells.length);
-              }
-            } else {
-              if (dist > 0.1) {
-                const overlap = (totalRadius - dist) * 0.35;
-                const pushX = (dx / dist) * overlap;
-                const pushY = (dy / dist) * overlap;
-                a.x -= pushX;
-                a.y -= pushY;
-                b.x += pushX;
-                b.y += pushY;
-              }
-            }
-          }
-        }
-      }
 
       const currentTotalScore = playerCells.reduce((sum, c) => sum + c.score, 0);
       setTotalPlayerScore(currentTotalScore);
@@ -1038,8 +1254,16 @@ export const GamesView: React.FC<GamesViewProps> = ({
             } else if (c.radius > pCell.radius * 1.1 && !shielded) {
               // Competitor devours this player cell!
               addFeed(`${c.name} devorou uma célula sua! 💔`);
+              const wasMain = pCell.isMain;
               playerCells.splice(pIdx, 1);
               setPlayerCellsCount(playerCells.length);
+
+              // Se a principal foi comida, a maior parte restante vira a nova principal!
+              if (wasMain && playerCells.length > 0) {
+                playerCells.sort((a, b) => b.radius - a.radius);
+                playerCells[0].isMain = true;
+                addFeed('👑 Sua nova célula principal assumiu o controle!');
+              }
 
               if (playerCells.length === 0) {
                 isGameOver = true;
@@ -1102,19 +1326,51 @@ export const GamesView: React.FC<GamesViewProps> = ({
       }
 
       // 10. Draw Player Cells in World
+      // Desenha linhas pontilhadas conectando partes secundárias voltando para a principal
+      if (mainCell && playerCells.length > 1) {
+        playerCells.forEach((cell) => {
+          if (!cell.isMain) {
+            ctx.save();
+            ctx.setLineDash([4, 4]);
+            ctx.strokeStyle = 'rgba(232, 168, 56, 0.4)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(cell.x, cell.y);
+            ctx.lineTo(mainCell.x, mainCell.y);
+            ctx.stroke();
+            ctx.restore();
+          }
+        });
+      }
+
       playerCells.forEach((cell, idx) => {
         ctx.save();
         ctx.beginPath();
         ctx.arc(cell.x, cell.y, cell.radius, 0, Math.PI * 2);
         ctx.fillStyle = estadoConfig.cor || '#E8A838';
         ctx.shadowColor = estadoConfig.cor || '#E8A838';
-        ctx.shadowBlur = 12;
+        ctx.shadowBlur = cell.isMain ? 14 : 6;
         ctx.fill();
-        ctx.lineWidth = 3.5;
-        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = cell.isMain ? 3.5 : 2;
+        ctx.strokeStyle = cell.isMain ? '#FFFFFF' : 'rgba(255, 255, 255, 0.8)';
         ctx.stroke();
         ctx.shadowBlur = 0;
         ctx.closePath();
+
+        // Efeito visual de Turbo / Chamas de Propulsão ao fugir ou acelerar
+        if (cell.isMain && canBoost) {
+          ctx.save();
+          const vLen = Math.hypot(cell.vx, cell.vy) || 1;
+          const flameX = cell.x - (cell.vx / vLen) * (cell.radius + 6);
+          const flameY = cell.y - (cell.vy / vLen) * (cell.radius + 6);
+          ctx.beginPath();
+          ctx.arc(flameX, flameY, 8 + Math.random() * 5, 0, Math.PI * 2);
+          ctx.fillStyle = '#F59E0B';
+          ctx.shadowColor = '#EF4444';
+          ctx.shadowBlur = 14;
+          ctx.fill();
+          ctx.restore();
+        }
 
         // Safe Spawn Shield Glow
         if (shielded) {
@@ -1131,21 +1387,15 @@ export const GamesView: React.FC<GamesViewProps> = ({
           ctx.fillText('🛡️ Seguro', cell.x, cell.y - cell.radius - 20);
         }
 
-        // Recombine Timer Indicator
-        if (now < cell.canMergeAt) {
-          const remainingSec = Math.ceil((cell.canMergeAt - now) / 1000);
-          ctx.fillStyle = '#FDE68A';
-          ctx.font = 'bold 9px monospace';
-          ctx.textAlign = 'center';
-          ctx.fillText(`Fusão em ${remainingSec}s`, cell.x, cell.y + cell.radius + 24);
-        }
-
-        // Name & Score Tag
+        // Nome & Tag identificando Célula Principal ou Parte Voltando
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = 'bold 11px sans-serif';
+        ctx.font = cell.isMain ? 'bold 11px sans-serif' : '9px sans-serif';
         ctx.textAlign = 'center';
-        const cellTag = playerCells.length > 1 ? ` (${idx + 1})` : '';
-        ctx.fillText(`⭐ ${currentUser.nome.split(' ')[0]}${cellTag}`, cell.x, cell.y - cell.radius - 7);
+        if (cell.isMain) {
+          ctx.fillText(`👑 ${currentUser.nome.split(' ')[0]} (Principal)`, cell.x, cell.y - cell.radius - 7);
+        } else {
+          ctx.fillText(`⚡ Voltando (${idx})`, cell.x, cell.y - cell.radius - 5);
+        }
 
         ctx.fillStyle = '#F5E9D3';
         ctx.font = 'bold 10px monospace';
@@ -1250,7 +1500,7 @@ export const GamesView: React.FC<GamesViewProps> = ({
       window.removeEventListener('keyup', handleKeyUp);
       canvas.removeEventListener('touchmove', handleCanvasTouch);
     };
-  }, [activeGame, currentUser, estadoConfig, isBoosting, onAddCertcoins, usuarios]);
+  }, [activeGame, currentUser.id, estadoConfig.cor, onAddCertcoins]);
 
   return (
     <div className="max-w-4xl mx-auto py-6 px-4 space-y-6 text-[#F5E9D3]">
@@ -1363,14 +1613,37 @@ export const GamesView: React.FC<GamesViewProps> = ({
 
           {/* TOP BAR FIXA: BOTÃO SAIR, STATUS E PONTUAÇÃO */}
           <div className="relative z-30 p-3 sm:p-4 flex items-center justify-between pointer-events-none">
-            {/* Botão Sair do Jogo (canto superior esquerdo) */}
-            <button
-              onClick={() => setActiveGame('menu')}
-              className="pointer-events-auto px-3.5 py-2 bg-[#1E1915]/90 hover:bg-red-950/60 active:scale-95 text-xs font-bold rounded-2xl text-[#F5E9D3] border border-[#382E24] hover:border-red-500/60 backdrop-blur-md transition-all flex items-center space-x-1.5 shadow-2xl"
-            >
-              <X className="w-4 h-4 text-red-400" />
-              <span>Sair do Jogo</span>
-            </button>
+            {/* Controles no Topo Esquerdo: Botão Sair + Música PNL Relaxante */}
+            <div className="flex items-center space-x-2 pointer-events-auto">
+              <button
+                onClick={() => {
+                  if (pnlAudioRef.current) pnlAudioRef.current.stop();
+                  setActiveGame('menu');
+                }}
+                className="px-3.5 py-2 bg-[#1E1915]/90 hover:bg-red-950/60 active:scale-95 text-xs font-bold rounded-2xl text-[#F5E9D3] border border-[#382E24] hover:border-red-500/60 backdrop-blur-md transition-all flex items-center space-x-1.5 shadow-2xl"
+              >
+                <X className="w-4 h-4 text-red-400" />
+                <span>Sair</span>
+              </button>
+
+              <button
+                onClick={toggleMusic}
+                className="px-3 py-2 bg-[#1E1915]/90 hover:bg-[#2A231D] active:scale-95 text-xs font-bold rounded-2xl border border-[#382E24] backdrop-blur-md transition-all flex items-center space-x-1.5 shadow-xl text-[#F5E9D3]"
+                title="Música PNL Relaxante (Frequências 432Hz/528Hz)"
+              >
+                {isMusicPlaying ? (
+                  <>
+                    <Volume2 className="w-4 h-4 text-emerald-400 animate-pulse" />
+                    <span className="hidden xs:inline text-emerald-400 text-[11px]">PNL 432Hz</span>
+                  </>
+                ) : (
+                  <>
+                    <VolumeX className="w-4 h-4 text-zinc-400" />
+                    <span className="hidden xs:inline text-zinc-400 text-[11px]">Mudo</span>
+                  </>
+                )}
+              </button>
+            </div>
 
             {/* Sala, Nível Médio e Escudo */}
             <div className="flex items-center space-x-2">
@@ -1461,54 +1734,63 @@ export const GamesView: React.FC<GamesViewProps> = ({
             <div className="flex flex-col items-center space-y-3 pointer-events-auto">
               {/* Botão Turbo */}
               <button
-                onMouseDown={() => setIsBoosting(true)}
-                onMouseUp={() => setIsBoosting(false)}
+                onMouseDown={() => {
+                  isBoostingRef.current = true;
+                  setIsBoostingUI(true);
+                }}
+                onMouseUp={() => {
+                  isBoostingRef.current = false;
+                  setIsBoostingUI(false);
+                }}
                 onTouchStart={(e) => {
                   e.stopPropagation();
-                  setIsBoosting(true);
+                  isBoostingRef.current = true;
+                  setIsBoostingUI(true);
                 }}
                 onTouchEnd={(e) => {
                   e.stopPropagation();
-                  setIsBoosting(false);
+                  isBoostingRef.current = false;
+                  setIsBoostingUI(false);
                 }}
                 className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex flex-col items-center justify-center font-black transition-all shadow-2xl active:scale-95 border backdrop-blur-md ${
-                  isBoosting
-                    ? 'bg-amber-500 text-black border-amber-300 scale-105'
+                  isBoostingUI
+                    ? 'bg-gradient-to-tr from-amber-500 to-orange-500 text-black border-amber-300 scale-105 shadow-amber-500/40'
                     : 'bg-[#1E1915]/90 text-[#F5E9D3] border-[#382E24] hover:border-amber-400/50'
                 }`}
-                title="Acelera a bolinha"
+                title="Acelera a bolinha gastando pontos para escapar ou caçar"
               >
-                <Zap className={`w-5 h-5 ${isBoosting ? 'fill-black text-black' : 'text-amber-400'}`} />
+                <Zap className={`w-5 h-5 ${isBoostingUI ? 'fill-black text-black animate-pulse' : 'text-amber-400'}`} />
                 <span className="text-[9px] mt-0.5">Turbo</span>
+                <span className="text-[7px] opacity-75 font-mono">-1 pt</span>
               </button>
 
-              {/* Botão Dividir em 2 (Split) */}
+              {/* Botão Dividir em 2, 4, 8... (Split) */}
               <button
                 onClick={handleTriggerSplit}
                 onTouchStart={(e) => {
                   e.stopPropagation();
                   handleTriggerSplit();
                 }}
-                disabled={totalPlayerScore < 16 && playerCellsCount <= 1}
+                disabled={totalPlayerScore < 12 && playerCellsCount <= 1}
                 className={`w-20 h-20 sm:w-24 sm:h-24 rounded-3xl flex flex-col items-center justify-center font-black transition-all shadow-2xl active:scale-95 border backdrop-blur-md ${
-                  totalPlayerScore >= 16 || playerCellsCount > 1
+                  totalPlayerScore >= 12 || playerCellsCount > 1
                     ? 'bg-gradient-to-br from-purple-900/90 to-indigo-900/90 text-white border-purple-400 hover:border-purple-300 shadow-purple-900/40'
                     : 'bg-[#1E1915]/60 text-zinc-500 border-[#382E24] opacity-50 cursor-not-allowed'
                 }`}
-                title="Dividir bolinha em duas partes"
+                title="Dividir bolinha: a principal vai para frente e as outras voltam para ela"
               >
                 <Scissors className="w-6 h-6 sm:w-7 sm:h-7 text-purple-300 mb-0.5" />
                 <span className="text-[10px] sm:text-[11px] font-black tracking-wider">DIVIDIR</span>
                 <span className="text-[8px] opacity-80 font-mono">
-                  {playerCellsCount > 1 ? `${playerCellsCount}/8 partes` : '2x'}
+                  {playerCellsCount > 1 ? `${playerCellsCount} partes` : '2x / 4x'}
                 </span>
               </button>
             </div>
 
             {/* Dica central sutil de controle */}
             <div className="hidden md:flex flex-col items-center text-[11px] text-[#C8B8A0] bg-[#120F0D]/80 px-3 py-1.5 rounded-xl border border-[#382E24] pointer-events-none mb-2 shadow">
-              <span>🎮 <strong>Joystick sensível</strong> guia a câmera pelo mundo gigante</span>
-              <span>⚔️ Bots inteligentes comem outros bots e podem se dividir!</span>
+              <span>👑 Você controla a <strong>Célula Principal</strong>; as outras partes a seguem e se juntam ao tocar!</span>
+              <span>✂️ Ao dividir, a principal avança na direção apontada e a metade fica para trás voltando.</span>
             </div>
 
             {/* LADO DIREITO: JOYSTICK ULTRA SENSÍVEL */}
