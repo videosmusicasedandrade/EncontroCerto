@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Heart, Camera, MapPin, Sparkles, X } from 'lucide-react';
+import { Heart, Camera, MapPin, Sparkles, X, Plus, Trash2 } from 'lucide-react';
 import { UserProfile, EstadoConfig } from '../types';
-import { ESTADOS_BRASIL, getEstadoConfig } from '../lib/estados';
+import { getEstadoConfig } from '../lib/estados';
 
 interface AuthModalProps {
   onCompleteProfile: (profile: Omit<UserProfile, 'id' | 'idade' | 'criado_em'>) => void;
@@ -30,10 +30,28 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [foto, setFoto] = useState(
     initialData?.foto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80'
   );
+  const [fotosList, setFotosList] = useState<string[]>(initialData?.fotos || []);
+  const [newPhotoUrl, setNewPhotoUrl] = useState('');
   const [descricao, setDescricao] = useState(initialData?.descricao || 'Apaixonado(a) por conexões verdadeiras! 💛');
   const [tipoPerfil, setTipoPerfil] = useState<'publico' | 'privado'>(initialData?.tipo_perfil || 'publico');
 
   const activeEstado = getEstadoConfig(estadoSigla);
+  const isVip = initialData?.isVip || false;
+  const maxPhotos = isVip ? 20 : 6;
+
+  const handleAddPhoto = () => {
+    if (!newPhotoUrl.trim()) return;
+    if (fotosList.length >= maxPhotos) {
+      alert(`Limite de fotos atingido! Você pode adicionar até ${maxPhotos} fotos ${isVip ? '(VIP 20 fotos)' : '(Normal 6 fotos)'}.`);
+      return;
+    }
+    setFotosList((prev) => [...prev, newPhotoUrl.trim()]);
+    setNewPhotoUrl('');
+  };
+
+  const handleRemovePhoto = (index: number) => {
+    setFotosList((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,9 +71,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       altura: parseFloat(altura) || 1.75,
       tipo_corporal: tipoCorporal,
       foto,
+      fotos: fotosList,
       descricao,
       tipo_perfil: tipoPerfil,
       exibir_na_busca: true,
+      isVip: initialData?.isVip,
     });
   };
 
@@ -69,11 +89,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-[#1E1915] rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl border border-[#382E24] my-8 relative">
+      <div className="bg-[#1E1915] rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl border border-[#382E24] my-8 relative max-h-[90vh] overflow-y-auto">
         {onClose && (
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 p-2 text-[#C8B8A0] hover:text-[#F5E9D3]"
+            className="absolute top-4 right-4 p-2 text-[#C8B8A0] hover:text-[#F5E9D3] cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -113,14 +133,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-bold text-[#C8B8A0] uppercase mb-1">
-                Estado (Fixo por Localização)
+                Estado (Fixo por GPS)
               </label>
               <div
                 className="w-full px-3 py-3 rounded-2xl border border-[#382E24] bg-[#120F0D] text-[#F5E9D3] font-black text-xs flex items-center justify-between"
-                title="Estado definido automaticamente pela sua localização"
+                title="Estado definido automaticamente pelo GPS"
               >
                 <span className="truncate">{activeEstado.emblem} {activeEstado.sigla} — {activeEstado.nome}</span>
-                <span className="text-[#E8A838] text-xs ml-1" title="Fixo por localização">🔒</span>
+                <span className="text-[#E8A838] text-xs ml-1" title="Fixo por GPS">🔒</span>
               </div>
             </div>
             <div>
@@ -194,9 +214,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           </div>
 
+          {/* Foto Principal */}
           <div>
             <label className="block text-xs font-bold text-[#C8B8A0] uppercase mb-1">
-              Foto de Perfil (URL ou escolha abaixo)
+              Foto Principal de Perfil (URL)
             </label>
             <input
               type="url"
@@ -220,15 +241,57 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           </div>
 
+          {/* Múltiplas Fotos (Até 6 normal, até 20 VIP) */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-bold text-[#C8B8A0] uppercase">
+                Galeria de Fotos ({fotosList.length}/{maxPhotos}) {isVip ? '💎 VIP (Até 20 fotos)' : '💛 Normal (Até 6 fotos)'}
+              </label>
+            </div>
+            <div className="flex space-x-2 mb-2">
+              <input
+                type="url"
+                value={newPhotoUrl}
+                onChange={(e) => setNewPhotoUrl(e.target.value)}
+                placeholder="Cole o link (URL) de outra foto..."
+                className="flex-1 px-3 py-2 rounded-xl border border-[#382E24] bg-[#120F0D] text-xs text-[#F5E9D3]"
+              />
+              <button
+                type="button"
+                onClick={handleAddPhoto}
+                className="px-4 py-2 bg-[#E8A838] hover:brightness-110 text-[#120F0D] rounded-xl text-xs font-black cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+            {fotosList.length > 0 && (
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                {fotosList.map((fUrl, i) => (
+                  <div key={i} className="relative group rounded-xl overflow-hidden aspect-square border border-[#382E24]">
+                    <img src={fUrl} alt={`Foto ${i + 1}`} className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePhoto(i)}
+                      className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Bio / Apresentação */}
           <div>
             <label className="block text-xs font-bold text-[#C8B8A0] uppercase mb-1">
-              Apresentação / Descrição
+              Bio / Apresentação (Estilo Tinder) 🌸
             </label>
             <textarea
               rows={3}
               value={descricao}
               onChange={(e) => setDescricao(e.target.value)}
-              placeholder="Conta um pouco sobre você..."
+              placeholder="Escreva sua bio, gostos, hobbies, o que procura..."
               className="w-full px-4 py-3 rounded-2xl border border-[#382E24] bg-[#120F0D] text-[#F5E9D3] focus:outline-none resize-none text-sm"
             />
           </div>
@@ -265,7 +328,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
           <button
             type="submit"
-            className="w-full py-3.5 golden-button rounded-2xl text-sm shadow-md transition-all active:scale-98"
+            className="w-full py-3.5 golden-button rounded-2xl text-sm shadow-md transition-all active:scale-98 cursor-pointer font-black"
           >
             {initialData ? 'Salvar Alterações 💛' : 'Começar a Prosear! 🚀'}
           </button>

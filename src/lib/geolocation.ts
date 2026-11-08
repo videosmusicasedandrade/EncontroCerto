@@ -70,13 +70,11 @@ export function mapRegionNameToSigla(regionNameOrCode?: string): string | null {
   if (!regionNameOrCode) return null;
   const upper = regionNameOrCode.toUpperCase().trim();
 
-  // Verifica se é código ISO com prefixo "BR-"
   if (upper.startsWith('BR-')) {
     const rawSigla = upper.replace('BR-', '');
     if (ESTADOS_COORDENADAS[rawSigla]) return rawSigla;
   }
 
-  // Verifica se é sigla direta
   if (ESTADOS_COORDENADAS[upper]) {
     return upper;
   }
@@ -95,15 +93,12 @@ export function mapRegionNameToSigla(regionNameOrCode?: string): string | null {
   return null;
 }
 
-// Verifica geometricamente se as coordenadas estão dentro de Minas Gerais
 export function isCoordinateInMinasGerais(lat: number, lng: number): boolean {
   const mg = ESTADOS_BOUNDING_BOXES.MG;
   return lat >= mg.minLat && lat <= mg.maxLat && lng >= mg.minLng && lng <= mg.maxLng;
 }
 
-// Encontra o estado mais condizente com a coordenada geográfica real
 export function findStateByCoordinates(lat: number, lng: number): { sigla: string; capital: string; nome: string } {
-  // 1. Primeiro verifica os limites precisos de Minas Gerais
   if (isCoordinateInMinasGerais(lat, lng)) {
     return {
       sigla: 'MG',
@@ -112,7 +107,6 @@ export function findStateByCoordinates(lat: number, lng: number): { sigla: strin
     };
   }
 
-  // 2. Verifica nas bounding boxes dos outros estados
   for (const [sigla, box] of Object.entries(ESTADOS_BOUNDING_BOXES)) {
     if (lat >= box.minLat && lat <= box.maxLat && lng >= box.minLng && lng <= box.maxLng) {
       return {
@@ -123,7 +117,6 @@ export function findStateByCoordinates(lat: number, lng: number): { sigla: strin
     }
   }
 
-  // 3. Fallback inteligente: se nada bater, Minas Gerais como casa principal
   return {
     sigla: 'MG',
     capital: 'Belo Horizonte',
@@ -131,12 +124,10 @@ export function findStateByCoordinates(lat: number, lng: number): { sigla: strin
   };
 }
 
-// Geocodificação Reversa de Alta Precisão (OpenStreetMap Nominatim & BigDataCloud)
 export async function reverseGeocodeCoordinates(
   lat: number,
   lng: number
 ): Promise<{ sigla: string; nome: string; cidade?: string }> {
-  // 1. Tenta OpenStreetMap Nominatim
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 4000);
@@ -174,10 +165,9 @@ export async function reverseGeocodeCoordinates(
       }
     }
   } catch (err) {
-    // Falha silenciosa no primeiro provedor
+    // Ignora
   }
 
-  // 2. Tenta BigDataCloud (Rápido e gratuito)
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 3500);
@@ -205,7 +195,6 @@ export async function reverseGeocodeCoordinates(
     // Ignora
   }
 
-  // 3. Resolução Geográfica por Bounding Box
   const geoResult = findStateByCoordinates(lat, lng);
   return {
     sigla: geoResult.sigla,
@@ -214,7 +203,6 @@ export async function reverseGeocodeCoordinates(
   };
 }
 
-// Solicita explicitamente o GPS de alta precisão ao navegador do usuário
 export function requestDeviceGPS(): Promise<LocationDetectionResult> {
   return new Promise((resolve) => {
     if (typeof window === 'undefined' || !navigator.geolocation) {
@@ -234,7 +222,6 @@ export function requestDeviceGPS(): Promise<LocationDetectionResult> {
         const lng = pos.coords.longitude;
         const precisao = pos.coords.accuracy;
 
-        // Geocodificação reversa para cidade e estado real
         const geoInfo = await reverseGeocodeCoordinates(lat, lng);
 
         const result: LocationDetectionResult = {
@@ -248,6 +235,7 @@ export function requestDeviceGPS(): Promise<LocationDetectionResult> {
         };
 
         saveLocationToStorage(result);
+        localStorage.setItem('encontro_certo_gps_asked', 'true');
         resolve(result);
       },
       (err) => {
@@ -258,7 +246,6 @@ export function requestDeviceGPS(): Promise<LocationDetectionResult> {
           msg = 'Tempo limite esgotado ao buscar GPS.';
         }
 
-        // Mantém Minas Gerais como padrão acolhedor sem inventar outros estados
         const fallback: LocationDetectionResult = {
           sigla: 'MG',
           nome: 'Minas Gerais',
@@ -270,42 +257,43 @@ export function requestDeviceGPS(): Promise<LocationDetectionResult> {
       },
       {
         enableHighAccuracy: true,
-        timeout: 12000,
-        maximumAge: 0, // Sempre pega posição fresca em tempo real
+        timeout: 10000,
+        maximumAge: 60000,
       }
     );
   });
 }
 
-// Orquestrador de detecção chamado no início do site
 export async function detectUserLocation(
   onLocationFound?: (res: LocationDetectionResult) => void
 ): Promise<LocationDetectionResult> {
-  // Verifica se o usuário já salvou explicitamente seu estado no perfil
   const cachedSigla = localStorage.getItem('encontro_certo_detected_estado');
   const cachedNome = localStorage.getItem('encontro_certo_detected_nome');
   const cachedCidade = localStorage.getItem('encontro_certo_detected_cidade');
-  const cachedMetodo = localStorage.getItem('encontro_certo_detected_metodo') as LocationDetectionResult['metodo'] | null;
+  const gpsAsked = localStorage.getItem('encontro_certo_gps_asked') === 'true';
 
-  // Se o usuário já tinha uma localização confirmada por GPS anterior
-  if (cachedSigla && cachedMetodo === 'gps') {
-    const cachedResult: LocationDetectionResult = {
-      sigla: cachedSigla,
-      nome: cachedNome || 'Minas Gerais',
-      cidade: cachedCidade || 'Belo Horizonte',
-      metodo: 'cache',
-    };
-    if (onLocationFound) onLocationFound(cachedResult);
+  let bestResult: LocationDetectionResult = {
+    sigla: cachedSigla || 'MG',
+    nome: cachedNome || 'Minas Gerais',
+    cidade: cachedCidade || 'Belo Horizonte',
+    metodo: cachedSigla ? 'cache' : 'padrao',
+  };
+
+  if (cachedSigla && onLocationFound) {
+    onLocationFound(bestResult);
   }
 
-  // Dispara a solicitação de autorização real de GPS do dispositivo
+  // Se já pediu permissão antes ou se é primeira vez, solicita o GPS
   const gpsResult = await requestDeviceGPS();
-  
-  if (onLocationFound) {
-    onLocationFound(gpsResult);
+  if (gpsResult.metodo === 'gps') {
+    bestResult = gpsResult;
+    saveLocationToStorage(gpsResult);
+    if (onLocationFound) {
+      onLocationFound(gpsResult);
+    }
   }
 
-  return gpsResult;
+  return bestResult;
 }
 
 export function saveLocationToStorage(loc: LocationDetectionResult) {
@@ -324,6 +312,6 @@ export function saveLocationToStorage(loc: LocationDetectionResult) {
       );
     }
   } catch (err) {
-    // Ignora restrições de localStorage
+    // Ignora
   }
 }

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Heart, Coins, Bell, Shield, Settings, User, MessageCircle, Gamepad2, Compass, Home, Trophy, MapPin, Globe2 } from 'lucide-react';
+import React from 'react';
+import { Heart, Coins, Bell, Shield, Settings, User, MessageCircle, Gamepad2, Home, Flame } from 'lucide-react';
 import { UserProfile, CertcoinLote, NotificacaoPush, EstadoConfig } from '../types';
 
 interface NavbarProps {
@@ -122,26 +122,26 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span>🎮 Jogos</span>
               </button>
               <button
-                onClick={() => setActiveTab('discover')}
+                onClick={() => setActiveTab('encontro')}
                 className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-black transition-all ${
-                  activeTab === 'discover' || activeTab === 'profile'
+                  activeTab === 'encontro'
+                    ? 'bg-gradient-to-r from-[#E8A838] to-[#D1704A] text-[#120F0D] shadow-[0_0_12px_rgba(232,168,56,0.3)]'
+                    : 'text-[#C8B8A0] hover:text-[#E8A838]'
+                }`}
+              >
+                <Flame className="w-4 h-4" />
+                <span>🔥 Encontro</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('profile')}
+                className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-black transition-all ${
+                  activeTab === 'profile' || activeTab === 'discover'
                     ? 'bg-gradient-to-r from-[#E8A838] to-[#D1704A] text-[#120F0D] shadow-[0_0_12px_rgba(232,168,56,0.3)]'
                     : 'text-[#C8B8A0] hover:text-[#E8A838]'
                 }`}
               >
                 <User className="w-4 h-4" />
                 <span>💛 Perfil</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('settings')}
-                className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-black transition-all ${
-                  activeTab === 'settings'
-                    ? 'bg-gradient-to-r from-[#E8A838] to-[#D1704A] text-[#120F0D] shadow-[0_0_12px_rgba(232,168,56,0.3)]'
-                    : 'text-[#C8B8A0] hover:text-[#E8A838]'
-                }`}
-              >
-                <Settings className="w-4 h-4" />
-                <span>⚙️ Configurações</span>
               </button>
               {currentUser?.isAdmin && (
                 <button
@@ -153,7 +153,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   }`}
                 >
                   <Shield className="w-4 h-4" />
-                  <span>Painel Admin</span>
+                  <span>Admin</span>
                 </button>
               )}
             </nav>
@@ -168,11 +168,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="text-xs font-black text-[#F5E9D3]">
                   {totalTemp + totalVitalicio} <span className="hidden sm:inline">Certcoins</span>
                 </span>
-                {totalTemp > 0 && (
-                  <span className="text-[10px] text-[#A89880] font-medium hidden md:inline">
-                    (expiram em {expiraDias}d)
-                  </span>
-                )}
               </button>
 
               <button
@@ -220,6 +215,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>🎮 Jogos</span>
           </button>
           <button
+            onClick={() => setActiveTab('encontro')}
+            className={`flex flex-col items-center text-[10px] font-black ${
+              activeTab === 'encontro' ? 'text-[#E8A838] shadow-[0_0_8px_rgba(232,168,56,0.3)]' : 'text-[#C8B8A0]'
+            }`}
+          >
+            <Flame className="w-4 h-4 mb-0.5" />
+            <span>🔥 Encontro</span>
+          </button>
+          <button
             onClick={() => setActiveTab('profile')}
             className={`flex flex-col items-center text-[10px] font-black ${
               activeTab === 'profile' || activeTab === 'discover' ? 'text-[#E8A838] shadow-[0_0_8px_rgba(232,168,56,0.3)]' : 'text-[#C8B8A0]'
@@ -227,15 +231,6 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <User className="w-4 h-4 mb-0.5" />
             <span>💛 Perfil</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('settings')}
-            className={`flex flex-col items-center text-[10px] font-black ${
-              activeTab === 'settings' ? 'text-[#E8A838] shadow-[0_0_8px_rgba(232,168,56,0.3)]' : 'text-[#C8B8A0]'
-            }`}
-          >
-            <Settings className="w-4 h-4 mb-0.5" />
-            <span>⚙️ Config</span>
           </button>
         </div>
       </header>

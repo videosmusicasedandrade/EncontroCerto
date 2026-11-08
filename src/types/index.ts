@@ -27,11 +27,14 @@ export interface UserProfile {
   altura?: number;
   tipo_corporal: 'Atlético' | 'Normal' | 'Um pouquinho a mais' | 'Gordinho(a)' | 'Prefiro não informar';
   foto: string;
+  fotos?: string[];
   descricao?: string;
   tipo_perfil: 'publico' | 'privado';
   exibir_na_busca: boolean;
   criado_em: string;
   isAdmin?: boolean;
+  isVip?: boolean;
+  is_online?: boolean;
 }
 
 export interface CertcoinLote {

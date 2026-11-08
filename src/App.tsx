@@ -17,6 +17,7 @@ import { CookieBanner } from './components/CookieBanner';
 import { Footer } from './components/Footer';
 import { CertcoinSpendModal } from './components/CertcoinSpendModal';
 import { LocationBanner } from './components/LocationBanner';
+import { EncontroView } from './components/EncontroView';
 import { UserProfile, CertcoinLote, Postagem, Match, Mensagem, Nota, Denuncia, NotificacaoPush } from './types';
 import { MOCK_USERS, INITIAL_POSTS, INITIAL_LOTES, INITIAL_MATCHES, INITIAL_MESSAGES } from './lib/store';
 import { getEstadoConfig } from './lib/estados';
@@ -43,9 +44,11 @@ export default function App() {
     safeGetJSON('encontro_certo_usuarios', MOCK_USERS)
   );
 
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() =>
-    safeGetJSON('encontro_certo_current_user', null)
-  );
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
+    const user = safeGetJSON<UserProfile | null>('encontro_certo_current_user', null);
+    if (user) return { ...user, is_online: true };
+    return null;
+  });
 
   const [lotes, setLotes] = useState<CertcoinLote[]>(() =>
     safeGetJSON('encontro_certo_lotes', INITIAL_LOTES)
@@ -116,74 +119,53 @@ export default function App() {
 
   const [locationResult, setLocationResult] = useState<LocationDetectionResult | null>(null);
 
-  // Detecção Automática de Localização com GPS de Alta Precisão no Carregamento
+  // Detecção de Localização: Pede GPS na primeira vez e atualiza a cada 30 minutos automaticamente
   useEffect(() => {
     let active = true;
 
-    detectUserLocation((detected) => {
-      if (!active) return;
-      setLocationResult(detected);
+    const runLocationDetection = () => {
+      detectUserLocation((detected) => {
+        if (!active) return;
+        setLocationResult(detected);
 
-      // Prioridade máxima para o GPS real
-      let activeSigla = 'MG';
-      const isManual = localStorage.getItem('encontro_certo_manual_estado') === 'true';
-      const savedSigla = safeGetJSON<string | null>('encontro_certo_estado', null);
+        let activeSigla = detected.sigla || 'MG';
+        if (detected.metodo === 'gps') {
+          activeSigla = detected.sigla;
+          localStorage.setItem('encontro_certo_estado', JSON.stringify(activeSigla));
+          localStorage.setItem('encontro_certo_gps_asked', 'true');
+        }
 
-      if (detected.metodo === 'gps') {
-        activeSigla = detected.sigla;
-        localStorage.setItem('encontro_certo_estado', JSON.stringify(activeSigla));
-      } else if (savedSigla && isManual) {
-        activeSigla = savedSigla;
-      } else {
-        // Fallback seguro: sempre Minas Gerais, nunca estados aleatórios
-        activeSigla = detected.sigla || 'MG';
-      }
+        setCurrentEstadoSigla(activeSigla);
 
-      setCurrentEstadoSigla(activeSigla);
+        if (currentUser) {
+          const coords = ESTADOS_COORDENADAS[activeSigla];
+          const updated = {
+            ...currentUser,
+            estado_sigla: activeSigla,
+            cidade: detected.cidade || currentUser.cidade,
+            latitude: detected.latitude ?? coords?.lat ?? currentUser.latitude,
+            longitude: detected.longitude ?? coords?.lng ?? currentUser.longitude,
+          };
+          setCurrentUser(updated);
+          setUsuarios((prev) => prev.map((u) => (u.id === currentUser.id ? updated : u)));
+        }
+      });
+    };
 
-      if (currentUser) {
-        const coords = ESTADOS_COORDENADAS[activeSigla];
-        const updated = {
-          ...currentUser,
-          estado_sigla: activeSigla,
-          cidade: detected.cidade || currentUser.cidade,
-          latitude: detected.latitude ?? coords?.lat ?? currentUser.latitude,
-          longitude: detected.longitude ?? coords?.lng ?? currentUser.longitude,
-        };
-        setCurrentUser(updated);
-        setUsuarios((prev) => prev.map((u) => (u.id === currentUser.id ? updated : u)));
-      }
+    runLocationDetection();
 
-      if (detected.metodo === 'gps') {
-        showSpendToast(`📍 GPS Ativo: ${detected.cidade || detected.nome} (${detected.sigla})! 💛`);
-      }
-    });
+    // Atualiza automaticamente a cada 30 minutos em segundo plano
+    const intervalId = setInterval(() => {
+      runLocationDetection();
+    }, 30 * 60 * 1000);
 
     return () => {
       active = false;
+      clearInterval(intervalId);
     };
-  }, []);
+  }, [currentUser?.id]);
 
-  const handleLocationUpdated = (loc: LocationDetectionResult) => {
-    setLocationResult(loc);
-    if (loc.sigla) {
-      setCurrentEstadoSigla(loc.sigla);
-      localStorage.setItem('encontro_certo_estado', JSON.stringify(loc.sigla));
-      if (currentUser) {
-        const coords = ESTADOS_COORDENADAS[loc.sigla];
-        const updated = {
-          ...currentUser,
-          estado_sigla: loc.sigla,
-          cidade: loc.cidade || currentUser.cidade,
-          latitude: loc.latitude ?? coords?.lat ?? currentUser.latitude,
-          longitude: loc.longitude ?? coords?.lng ?? currentUser.longitude,
-        };
-        setCurrentUser(updated);
-        setUsuarios((prev) => prev.map((u) => (u.id === currentUser.id ? updated : u)));
-      }
-      showSpendToast(`📍 Localização definida: ${loc.cidade || loc.nome} (${loc.sigla})! 💛`);
-    }
-  };
+
 
   const handleSelectEstado = (sigla: string) => {
     setCurrentEstadoSigla(sigla);
@@ -667,7 +649,6 @@ export default function App() {
         <LocationBanner
           currentEstadoSigla={currentEstadoSigla}
           locationResult={locationResult}
-          onLocationUpdated={handleLocationUpdated}
         />
         <LoginScreen
           estadoConfig={estadoConfig}
@@ -706,14 +687,13 @@ export default function App() {
         setActiveTab={setActiveTab}
         onOpenCertcoins={() => setShowCertcoinsModal(true)}
         onOpenNotifications={() => setShowNotifsModal(true)}
-        onlineCount={12}
+        onlineCount={usuarios.filter((u) => u.is_online).length + (currentUser?.is_online ? 1 : 0)}
       />
 
       {/* Banner de Autorização e Detecção Precisa de GPS */}
       <LocationBanner
         currentEstadoSigla={currentEstadoSigla}
         locationResult={locationResult}
-        onLocationUpdated={handleLocationUpdated}
       />
 
       <main className="transition-all duration-300">
@@ -785,6 +765,16 @@ export default function App() {
           />
         )}
 
+        {activeTab === 'encontro' && (
+          <EncontroView
+            currentUser={currentUser}
+            estadoConfig={estadoConfig}
+            usuarios={usuarios}
+            matches={currentMatchIds}
+            onSendLike={handleSendLike}
+          />
+        )}
+
         {activeTab === 'leaderboard' && (
           <LeaderboardView
             usuarios={usuarios}
@@ -808,17 +798,6 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'settings' && (
-          <SettingsView
-            currentUser={currentUser}
-            estadoConfig={estadoConfig}
-            onSelectEstado={handleSelectEstado}
-            onUpdateSettings={(updates) => setCurrentUser({ ...currentUser, ...updates })}
-            onOpenProfileEdit={() => setShowAuthModal(true)}
-            onOpenCompliance={(tab) => setComplianceTab(tab)}
-          />
-        )}
-
         {activeTab === 'profile' && (
           <div className="max-w-xl mx-auto py-8 px-4 space-y-6 text-[#F5E9D3]">
             <div className="bg-[#1E1915] rounded-3xl p-6 shadow-lg border border-[#382E24] text-center space-y-4">
@@ -832,7 +811,7 @@ export default function App() {
               </p>
               <button
                 onClick={() => setShowAuthModal(true)}
-                className="w-full py-3 golden-button rounded-xl text-sm font-black"
+                className="w-full py-3 golden-button rounded-xl text-sm font-black cursor-pointer"
               >
                 Editar Meu Perfil {estadoConfig.emblem}
               </button>
@@ -841,6 +820,15 @@ export default function App() {
               postsCount={posts.filter((p) => p.autor_id === currentUser.id).length}
               matchesCount={matches.filter((m) => m.usuario1_id === currentUser.id || m.usuario2_id === currentUser.id).length}
               estadoConfig={estadoConfig}
+            />
+
+            <SettingsView
+              currentUser={currentUser}
+              estadoConfig={estadoConfig}
+              onSelectEstado={handleSelectEstado}
+              onUpdateSettings={(updates) => setCurrentUser({ ...currentUser, ...updates })}
+              onOpenProfileEdit={() => setShowAuthModal(true)}
+              onOpenCompliance={(tab) => setComplianceTab(tab)}
             />
           </div>
         )}
