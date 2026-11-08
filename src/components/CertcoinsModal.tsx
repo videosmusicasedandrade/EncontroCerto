@@ -55,16 +55,16 @@ export const CertcoinsModal: React.FC<CertcoinsModalProps> = ({
   const otherUsers = usuarios.filter((u) => u.id !== currentUserId);
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#120F0D]/80 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
-      <div className="bg-[#1E1915] rounded-3xl max-w-md w-full p-6 shadow-2xl border border-[#382E24] relative text-[#F5E9D3] space-y-5">
+    <div className="fixed inset-0 z-50 bg-[#120F0D]/80 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn overflow-y-auto">
+      <div className="bg-[#1E1915] rounded-3xl max-w-md w-full p-6 shadow-2xl border border-[#382E24] relative text-[#F5E9D3] space-y-5 my-auto max-h-[85vh] overflow-y-auto">
         <button
           onClick={onClose}
-          className="absolute top-5 right-5 p-2 rounded-full hover:bg-[#2A231D] text-[#C8B8A0] transition-colors"
+          className="absolute top-5 right-5 p-2 rounded-full hover:bg-[#2A231D] text-[#C8B8A0] transition-colors cursor-pointer"
         >
           <X className="w-5 h-5" />
         </button>
 
-        <div className="text-center">
+        <div className="text-center pt-2">
           <div className="w-16 h-16 bg-gradient-to-tr from-[#E8A838] via-[#F0C040] to-[#D1704A] rounded-3xl mx-auto flex items-center justify-center shadow-lg mb-3 animate-heartbeat text-[#120F0D]">
             <Coins className="w-9 h-9" />
           </div>
@@ -104,7 +104,7 @@ export const CertcoinsModal: React.FC<CertcoinsModalProps> = ({
         )}
 
         {/* Transfer Form */}
-        <form onSubmit={handleSend} className="space-y-4">
+        <form onSubmit={handleSend} className="space-y-4 pb-2">
           <h3 className="text-xs font-black text-[#C8B8A0] uppercase">
             Mandar carinho em Certcoins para alguém
           </h3>
@@ -144,7 +144,7 @@ export const CertcoinsModal: React.FC<CertcoinsModalProps> = ({
 
           <button
             type="submit"
-            className="w-full py-3.5 golden-button rounded-2xl text-xs sm:text-sm shadow-md flex items-center justify-center space-x-2"
+            className="w-full py-3.5 golden-button rounded-2xl text-xs sm:text-sm shadow-md flex items-center justify-center space-x-2 cursor-pointer"
           >
             <Send className="w-4 h-4 text-[#120F0D]" />
             <span>Mandar com carinho 💛</span>

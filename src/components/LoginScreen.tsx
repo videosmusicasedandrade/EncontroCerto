@@ -321,14 +321,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               <div className="space-y-4 animate-fadeIn">
                 <div className="p-3 bg-[#120F0D] rounded-2xl border border-[#382E24] flex items-center justify-between">
                   <div>
-                    <span className="text-[10px] uppercase font-black text-[#C8B8A0] block">Estado Selecionado</span>
+                    <span className="text-[10px] uppercase font-black text-[#C8B8A0] block">Estado Detectado por GPS</span>
                     <span className="text-sm font-black text-[#F5E9D3] flex items-center space-x-1.5 mt-0.5">
                       <span>{estadoConfig.emblem}</span>
                       <span style={{ color: estadoConfig.cor }}>{estadoConfig.nome} ({estadoConfig.sigla})</span>
                     </span>
                   </div>
-                  <span className="px-2 py-1 rounded-lg bg-[#2A231D] text-[10px] font-bold text-[#E8A838] border border-[#382E24]">
-                    GPS/IP Automático
+                  <span className="px-2 py-1 rounded-lg bg-[#2A231D] text-[10px] font-bold text-emerald-400 border border-emerald-800/50">
+                    GPS Preciso 📍
                   </span>
                 </div>
 

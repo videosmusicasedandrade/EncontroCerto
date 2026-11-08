@@ -4,73 +4,59 @@ export interface LocationDetectionResult {
   sigla: string;
   nome: string;
   cidade?: string;
-  metodo: 'gps' | 'ip' | 'cache' | 'padrao';
+  metodo: 'gps' | 'reverso' | 'cache' | 'padrao';
   latitude?: number;
   longitude?: number;
+  precisao?: number;
+  error?: string;
 }
 
-// Coordenadas aproximadas das capitais/centros dos 26 estados + DF
-export const ESTADOS_COORDENADAS: Record<string, { lat: number; lng: number; capital: string }> = {
-  AC: { lat: -9.975, lng: -67.810, capital: 'Rio Branco' },
-  AL: { lat: -9.665, lng: -35.735, capital: 'Maceió' },
-  AP: { lat: 0.035, lng: -51.070, capital: 'Macapá' },
-  AM: { lat: -3.119, lng: -60.021, capital: 'Manaus' },
-  BA: { lat: -12.971, lng: -38.510, capital: 'Salvador' },
-  CE: { lat: -3.717, lng: -38.543, capital: 'Fortaleza' },
-  DF: { lat: -15.794, lng: -47.882, capital: 'Brasília' },
-  ES: { lat: -20.315, lng: -40.312, capital: 'Vitória' },
-  GO: { lat: -16.686, lng: -49.264, capital: 'Goiânia' },
-  MA: { lat: -2.530, lng: -44.306, capital: 'São Luís' },
-  MT: { lat: -15.601, lng: -56.097, capital: 'Cuiabá' },
-  MS: { lat: -20.469, lng: -54.620, capital: 'Campo Grande' },
-  MG: { lat: -19.920, lng: -43.940, capital: 'Belo Horizonte' },
-  PA: { lat: -1.455, lng: -48.502, capital: 'Belém' },
-  PB: { lat: -7.115, lng: -34.863, capital: 'João Pessoa' },
-  PR: { lat: -25.428, lng: -49.273, capital: 'Curitiba' },
-  PE: { lat: -8.057, lng: -34.882, capital: 'Recife' },
-  PI: { lat: -5.089, lng: -42.801, capital: 'Teresina' },
-  RJ: { lat: -22.906, lng: -43.172, capital: 'Rio de Janeiro' },
-  RN: { lat: -5.794, lng: -35.211, capital: 'Natal' },
-  RS: { lat: -30.034, lng: -51.217, capital: 'Porto Alegre' },
-  RO: { lat: -8.761, lng: -63.903, capital: 'Porto Velho' },
-  RR: { lat: 2.823, lng: -60.675, capital: 'Boa Vista' },
-  SC: { lat: -27.595, lng: -48.548, capital: 'Florianópolis' },
-  SP: { lat: -23.550, lng: -46.633, capital: 'São Paulo' },
-  SE: { lat: -10.947, lng: -37.073, capital: 'Aracaju' },
-  TO: { lat: -10.184, lng: -48.333, capital: 'Palmas' },
+// Limites geográficos precisos (Bounding Boxes) dos principais estados do Brasil
+export const ESTADOS_BOUNDING_BOXES: Record<string, { minLat: number; maxLat: number; minLng: number; maxLng: number; capital: string; nome: string }> = {
+  MG: { minLat: -22.92, maxLat: -14.23, minLng: -51.08, maxLng: -39.85, capital: 'Belo Horizonte', nome: 'Minas Gerais' },
+  SP: { minLat: -25.35, maxLat: -19.78, minLng: -53.11, maxLng: -44.16, capital: 'São Paulo', nome: 'São Paulo' },
+  RJ: { minLat: -23.37, maxLat: -20.76, minLng: -44.89, maxLng: -40.96, capital: 'Rio de Janeiro', nome: 'Rio de Janeiro' },
+  ES: { minLat: -21.31, maxLat: -17.89, minLng: -41.88, maxLng: -39.67, capital: 'Vitória', nome: 'Espírito Santo' },
+  BA: { minLat: -18.35, maxLat: -8.53, minLng: -46.62, maxLng: -37.34, capital: 'Salvador', nome: 'Bahia' },
+  GO: { minLat: -19.50, maxLat: -12.39, minLng: -53.25, maxLng: -45.90, capital: 'Goiânia', nome: 'Goiás' },
+  DF: { minLat: -16.05, maxLat: -15.50, minLng: -48.28, maxLng: -47.30, capital: 'Brasília', nome: 'Distrito Federal' },
+  MT: { minLat: -18.04, maxLat: -7.34, minLng: -61.64, maxLng: -50.22, capital: 'Cuiabá', nome: 'Mato Grosso' },
+  MS: { minLat: -24.06, maxLat: -17.16, minLng: -58.17, maxLng: -50.92, capital: 'Campo Grande', nome: 'Mato Grosso do Sul' },
+  PR: { minLat: -26.72, maxLat: -22.51, minLng: -54.62, maxLng: -48.02, capital: 'Curitiba', nome: 'Paraná' },
+  SC: { minLat: -29.35, maxLat: -25.96, minLng: -53.84, maxLng: -48.35, capital: 'Florianópolis', nome: 'Santa Catarina' },
+  RS: { minLat: -33.75, maxLat: -27.08, minLng: -57.65, maxLng: -49.69, capital: 'Porto Alegre', nome: 'Rio Grande do Sul' },
 };
 
-function calcularDistanciaKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-export function findClosestEstado(lat: number, lng: number): { sigla: string; capital: string } {
-  let closestSigla = 'MG';
-  let minDistance = Infinity;
-
-  for (const [sigla, coords] of Object.entries(ESTADOS_COORDENADAS)) {
-    const dist = calcularDistanciaKm(lat, lng, coords.lat, coords.lng);
-    if (dist < minDistance) {
-      minDistance = dist;
-      closestSigla = sigla;
-    }
-  }
-
-  return {
-    sigla: closestSigla,
-    capital: ESTADOS_COORDENADAS[closestSigla]?.capital || 'Belo Horizonte',
-  };
-}
+// Coordenadas das capitais dos 26 estados + DF
+export const ESTADOS_COORDENADAS: Record<string, { lat: number; lng: number; capital: string }> = {
+  MG: { lat: -19.920, lng: -43.940, capital: 'Belo Horizonte' },
+  SP: { lat: -23.550, lng: -46.633, capital: 'São Paulo' },
+  RJ: { lat: -22.906, lng: -43.172, capital: 'Rio de Janeiro' },
+  ES: { lat: -20.315, lng: -40.312, capital: 'Vitória' },
+  BA: { lat: -12.971, lng: -38.510, capital: 'Salvador' },
+  DF: { lat: -15.794, lng: -47.882, capital: 'Brasília' },
+  GO: { lat: -16.686, lng: -49.264, capital: 'Goiânia' },
+  MT: { lat: -15.601, lng: -56.097, capital: 'Cuiabá' },
+  MS: { lat: -20.469, lng: -54.620, capital: 'Campo Grande' },
+  PR: { lat: -25.428, lng: -49.273, capital: 'Curitiba' },
+  SC: { lat: -27.595, lng: -48.548, capital: 'Florianópolis' },
+  RS: { lat: -30.034, lng: -51.217, capital: 'Porto Alegre' },
+  PE: { lat: -8.057, lng: -34.882, capital: 'Recife' },
+  CE: { lat: -3.717, lng: -38.543, capital: 'Fortaleza' },
+  MA: { lat: -2.530, lng: -44.306, capital: 'São Luís' },
+  PB: { lat: -7.115, lng: -34.863, capital: 'João Pessoa' },
+  RN: { lat: -5.794, lng: -35.211, capital: 'Natal' },
+  AL: { lat: -9.665, lng: -35.735, capital: 'Maceió' },
+  PI: { lat: -5.089, lng: -42.801, capital: 'Teresina' },
+  SE: { lat: -10.947, lng: -37.073, capital: 'Aracaju' },
+  PA: { lat: -1.455, lng: -48.502, capital: 'Belém' },
+  AM: { lat: -3.119, lng: -60.021, capital: 'Manaus' },
+  RO: { lat: -8.761, lng: -63.903, capital: 'Porto Velho' },
+  TO: { lat: -10.184, lng: -48.333, capital: 'Palmas' },
+  AC: { lat: -9.975, lng: -67.810, capital: 'Rio Branco' },
+  AP: { lat: 0.035, lng: -51.070, capital: 'Macapá' },
+  RR: { lat: 2.823, lng: -60.675, capital: 'Boa Vista' },
+};
 
 function normalizeText(text: string): string {
   return text
@@ -83,6 +69,12 @@ function normalizeText(text: string): string {
 export function mapRegionNameToSigla(regionNameOrCode?: string): string | null {
   if (!regionNameOrCode) return null;
   const upper = regionNameOrCode.toUpperCase().trim();
+
+  // Verifica se é código ISO com prefixo "BR-"
+  if (upper.startsWith('BR-')) {
+    const rawSigla = upper.replace('BR-', '');
+    if (ESTADOS_COORDENADAS[rawSigla]) return rawSigla;
+  }
 
   // Verifica se é sigla direta
   if (ESTADOS_COORDENADAS[upper]) {
@@ -103,161 +95,220 @@ export function mapRegionNameToSigla(regionNameOrCode?: string): string | null {
   return null;
 }
 
-// 1. Detecção via IP Geolocation (rápido, sem pedir permissão invasiva)
-async function detectViaIP(): Promise<LocationDetectionResult | null> {
+// Verifica geometricamente se as coordenadas estão dentro de Minas Gerais
+export function isCoordinateInMinasGerais(lat: number, lng: number): boolean {
+  const mg = ESTADOS_BOUNDING_BOXES.MG;
+  return lat >= mg.minLat && lat <= mg.maxLat && lng >= mg.minLng && lng <= mg.maxLng;
+}
+
+// Encontra o estado mais condizente com a coordenada geográfica real
+export function findStateByCoordinates(lat: number, lng: number): { sigla: string; capital: string; nome: string } {
+  // 1. Primeiro verifica os limites precisos de Minas Gerais
+  if (isCoordinateInMinasGerais(lat, lng)) {
+    return {
+      sigla: 'MG',
+      capital: 'Belo Horizonte',
+      nome: 'Minas Gerais',
+    };
+  }
+
+  // 2. Verifica nas bounding boxes dos outros estados
+  for (const [sigla, box] of Object.entries(ESTADOS_BOUNDING_BOXES)) {
+    if (lat >= box.minLat && lat <= box.maxLat && lng >= box.minLng && lng <= box.maxLng) {
+      return {
+        sigla,
+        capital: box.capital,
+        nome: box.nome,
+      };
+    }
+  }
+
+  // 3. Fallback inteligente: se nada bater, Minas Gerais como casa principal
+  return {
+    sigla: 'MG',
+    capital: 'Belo Horizonte',
+    nome: 'Minas Gerais',
+  };
+}
+
+// Geocodificação Reversa de Alta Precisão (OpenStreetMap Nominatim & BigDataCloud)
+export async function reverseGeocodeCoordinates(
+  lat: number,
+  lng: number
+): Promise<{ sigla: string; nome: string; cidade?: string }> {
+  // 1. Tenta OpenStreetMap Nominatim
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3500);
+    const timeout = setTimeout(() => controller.abort(), 4000);
 
-    const res = await fetch('https://get.geojs.io/v1/ip/geo.json', {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&addressdetails=1`;
+    const res = await fetch(url, {
       signal: controller.signal,
+      headers: {
+        'Accept-Language': 'pt-BR,pt;q=0.9',
+      },
     });
     clearTimeout(timeout);
 
     if (res.ok) {
       const data = await res.json();
-      const sigla = mapRegionNameToSigla(data.region);
+      const addr = data.address || {};
+      const rawState = addr.state || addr['ISO3166-2-lvl4'] || '';
+      const sigla = mapRegionNameToSigla(rawState) || (isCoordinateInMinasGerais(lat, lng) ? 'MG' : null);
+      
+      const cidade =
+        addr.city ||
+        addr.town ||
+        addr.municipality ||
+        addr.village ||
+        addr.county ||
+        addr.suburb;
+
       if (sigla) {
         const est = ESTADOS_BRASIL.find((e) => e.sigla === sigla);
         return {
           sigla,
-          nome: est?.nome || sigla,
-          cidade: data.city || ESTADOS_COORDENADAS[sigla]?.capital,
-          metodo: 'ip',
-          latitude: parseFloat(data.latitude),
-          longitude: parseFloat(data.longitude),
+          nome: est?.nome || 'Minas Gerais',
+          cidade: cidade || ESTADOS_COORDENADAS[sigla]?.capital || 'Belo Horizonte',
         };
-      } else if (data.latitude && data.longitude) {
-        // Se vier coordenadas (mesmo sem sigla exata)
-        const lat = parseFloat(data.latitude);
-        const lng = parseFloat(data.longitude);
-        // Se estiver dentro da caixa geográfica do Brasil
-        if (lat >= -34 && lat <= 6 && lng >= -74 && lng <= -34) {
-          const closest = findClosestEstado(lat, lng);
-          const est = ESTADOS_BRASIL.find((e) => e.sigla === closest.sigla);
-          return {
-            sigla: closest.sigla,
-            nome: est?.nome || closest.sigla,
-            cidade: data.city || closest.capital,
-            metodo: 'ip',
-            latitude: lat,
-            longitude: lng,
-          };
-        }
       }
     }
   } catch (err) {
-    // Falha silenciosa no primeiro serviço, tenta backup
+    // Falha silenciosa no primeiro provedor
   }
 
-  // Backup via ipwho.is
+  // 2. Tenta BigDataCloud (Rápido e gratuito)
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 3500);
 
-    const res = await fetch('https://ipwho.is/', {
-      signal: controller.signal,
-    });
+    const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=pt`;
+    const res = await fetch(url, { signal: controller.signal });
     clearTimeout(timeout);
 
     if (res.ok) {
       const data = await res.json();
-      if (data.success) {
-        const sigla = mapRegionNameToSigla(data.region_code) || mapRegionNameToSigla(data.region);
-        if (sigla) {
-          const est = ESTADOS_BRASIL.find((e) => e.sigla === sigla);
-          return {
-            sigla,
-            nome: est?.nome || sigla,
-            cidade: data.city || ESTADOS_COORDENADAS[sigla]?.capital,
-            metodo: 'ip',
-            latitude: data.latitude,
-            longitude: data.longitude,
-          };
-        }
+      const rawState = data.principalSubdivisionCode || data.principalSubdivision;
+      const sigla = mapRegionNameToSigla(rawState) || (isCoordinateInMinasGerais(lat, lng) ? 'MG' : null);
+      const cidade = data.city || data.locality;
+
+      if (sigla) {
+        const est = ESTADOS_BRASIL.find((e) => e.sigla === sigla);
+        return {
+          sigla,
+          nome: est?.nome || 'Minas Gerais',
+          cidade: cidade || ESTADOS_COORDENADAS[sigla]?.capital,
+        };
       }
     }
   } catch (err) {
     // Ignora
   }
 
-  return null;
+  // 3. Resolução Geográfica por Bounding Box
+  const geoResult = findStateByCoordinates(lat, lng);
+  return {
+    sigla: geoResult.sigla,
+    nome: geoResult.nome,
+    cidade: geoResult.capital,
+  };
 }
 
-// 2. Detecção via GPS / Dispositivo (alta precisão)
-function detectViaGPS(): Promise<LocationDetectionResult | null> {
+// Solicita explicitamente o GPS de alta precisão ao navegador do usuário
+export function requestDeviceGPS(): Promise<LocationDetectionResult> {
   return new Promise((resolve) => {
     if (typeof window === 'undefined' || !navigator.geolocation) {
-      resolve(null);
+      resolve({
+        sigla: 'MG',
+        nome: 'Minas Gerais',
+        cidade: 'Belo Horizonte',
+        metodo: 'padrao',
+        error: 'Geolocalização não suportada pelo navegador.',
+      });
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
+      async (pos) => {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
-        const closest = findClosestEstado(lat, lng);
-        const est = ESTADOS_BRASIL.find((e) => e.sigla === closest.sigla);
+        const precisao = pos.coords.accuracy;
 
-        resolve({
-          sigla: closest.sigla,
-          nome: est?.nome || closest.sigla,
-          cidade: closest.capital,
+        // Geocodificação reversa para cidade e estado real
+        const geoInfo = await reverseGeocodeCoordinates(lat, lng);
+
+        const result: LocationDetectionResult = {
+          sigla: geoInfo.sigla,
+          nome: geoInfo.nome,
+          cidade: geoInfo.cidade,
           metodo: 'gps',
           latitude: lat,
           longitude: lng,
-        });
+          precisao,
+        };
+
+        saveLocationToStorage(result);
+        resolve(result);
       },
       (err) => {
-        // Usuário negou ou erro de timeout
-        resolve(null);
+        let msg = 'Permissão de localização não concedida.';
+        if (err.code === err.PERMISSION_DENIED) {
+          msg = 'Permissão de localização foi recusada no navegador.';
+        } else if (err.code === err.TIMEOUT) {
+          msg = 'Tempo limite esgotado ao buscar GPS.';
+        }
+
+        // Mantém Minas Gerais como padrão acolhedor sem inventar outros estados
+        const fallback: LocationDetectionResult = {
+          sigla: 'MG',
+          nome: 'Minas Gerais',
+          cidade: 'Belo Horizonte',
+          metodo: 'padrao',
+          error: msg,
+        };
+        resolve(fallback);
       },
       {
-        timeout: 6000,
         enableHighAccuracy: true,
-        maximumAge: 60000,
+        timeout: 12000,
+        maximumAge: 0, // Sempre pega posição fresca em tempo real
       }
     );
   });
 }
 
-// 3. Orquestrador Principal de Detecção Automática
+// Orquestrador de detecção chamado no início do site
 export async function detectUserLocation(
   onLocationFound?: (res: LocationDetectionResult) => void
 ): Promise<LocationDetectionResult> {
-  // Se já temos em cache recente
+  // Verifica se o usuário já salvou explicitamente seu estado no perfil
   const cachedSigla = localStorage.getItem('encontro_certo_detected_estado');
   const cachedNome = localStorage.getItem('encontro_certo_detected_nome');
   const cachedCidade = localStorage.getItem('encontro_certo_detected_cidade');
+  const cachedMetodo = localStorage.getItem('encontro_certo_detected_metodo') as LocationDetectionResult['metodo'] | null;
 
-  let bestResult: LocationDetectionResult = {
-    sigla: cachedSigla || 'MG',
-    nome: cachedNome || 'Minas Gerais',
-    cidade: cachedCidade || 'Belo Horizonte',
-    metodo: cachedSigla ? 'cache' : 'padrao',
-  };
-
-  // 1. Tenta IP Geolocation primeiro (instantâneo)
-  const ipResult = await detectViaIP();
-  if (ipResult) {
-    bestResult = ipResult;
-    saveLocationToStorage(ipResult);
-    if (onLocationFound) onLocationFound(ipResult);
+  // Se o usuário já tinha uma localização confirmada por GPS anterior
+  if (cachedSigla && cachedMetodo === 'gps') {
+    const cachedResult: LocationDetectionResult = {
+      sigla: cachedSigla,
+      nome: cachedNome || 'Minas Gerais',
+      cidade: cachedCidade || 'Belo Horizonte',
+      metodo: 'cache',
+    };
+    if (onLocationFound) onLocationFound(cachedResult);
   }
 
-  // 2. Tenta GPS em segundo plano para refinar se disponível
-  detectViaGPS().then((gpsResult) => {
-    if (gpsResult) {
-      bestResult = gpsResult;
-      saveLocationToStorage(gpsResult);
-      if (onLocationFound) onLocationFound(gpsResult);
-    }
-  });
+  // Dispara a solicitação de autorização real de GPS do dispositivo
+  const gpsResult = await requestDeviceGPS();
+  
+  if (onLocationFound) {
+    onLocationFound(gpsResult);
+  }
 
-  return bestResult;
+  return gpsResult;
 }
 
-function saveLocationToStorage(loc: LocationDetectionResult) {
+export function saveLocationToStorage(loc: LocationDetectionResult) {
   try {
     localStorage.setItem('encontro_certo_estado', JSON.stringify(loc.sigla));
     localStorage.setItem('encontro_certo_detected_estado', loc.sigla);
@@ -267,9 +318,12 @@ function saveLocationToStorage(loc: LocationDetectionResult) {
     }
     localStorage.setItem('encontro_certo_detected_metodo', loc.metodo);
     if (loc.latitude && loc.longitude) {
-      localStorage.setItem('encontro_certo_detected_coords', JSON.stringify({ lat: loc.latitude, lng: loc.longitude }));
+      localStorage.setItem(
+        'encontro_certo_detected_coords',
+        JSON.stringify({ lat: loc.latitude, lng: loc.longitude })
+      );
     }
   } catch (err) {
-    // LocalStorage quota ou indisponível
+    // Ignora restrições de localStorage
   }
 }

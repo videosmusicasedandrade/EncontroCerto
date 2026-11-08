@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
 import { getEstadoConfig } from '../lib/estados';
-import { EstadoConfig } from '../types';
-import { MapPin, RefreshCw, CheckCircle2, Globe2 } from 'lucide-react';
-import { detectUserLocation } from '../lib/geolocation';
-import { StateSelectorModal } from './StateSelectorModal';
+import { MapPin, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { requestDeviceGPS } from '../lib/geolocation';
 
 interface StateSelectorProps {
   currentEstadoSigla: string;
@@ -19,27 +17,25 @@ export const StateSelector: React.FC<StateSelectorProps> = ({
   const currentConfig = getEstadoConfig(currentEstadoSigla);
   const [isDetecting, setIsDetecting] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
-  const [showStateModal, setShowStateModal] = useState(false);
 
   const handleRefreshLocation = async () => {
     setIsDetecting(true);
     setFeedbackMsg(null);
     try {
-      const loc = await detectUserLocation((updated) => {
-        if (onSelectEstado) {
-          onSelectEstado(updated.sigla);
-        }
-      });
-
+      const loc = await requestDeviceGPS();
       if (onSelectEstado && loc.sigla) {
         onSelectEstado(loc.sigla);
       }
-      setFeedbackMsg(`Localização confirmada: ${loc.nome} (${loc.sigla}) 📍`);
+      if (loc.metodo === 'gps') {
+        setFeedbackMsg(`GPS confirmado: ${loc.cidade || loc.nome} (${loc.sigla}) 📍`);
+      } else {
+        setFeedbackMsg(`Localização mantida: ${loc.nome} (${loc.sigla}) 💛`);
+      }
     } catch (err) {
-      setFeedbackMsg('Localização mantida com sucesso.');
+      setFeedbackMsg('Mantendo localização atual.');
     } finally {
       setIsDetecting(false);
-      setTimeout(() => setFeedbackMsg(null), 3000);
+      setTimeout(() => setFeedbackMsg(null), 4000);
     }
   };
 
@@ -82,9 +78,15 @@ export const StateSelector: React.FC<StateSelectorProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center space-x-2 shrink-0 text-xs text-[#C8B8A0] bg-[#120F0D] px-3 py-1.5 rounded-xl border border-[#382E24]">
-          <MapPin className="w-3.5 h-3.5 text-[#E8A838]" />
-          <span>Localização Automática (GPS/IP)</span>
+        <div className="flex items-center space-x-2 shrink-0">
+          <button
+            onClick={handleRefreshLocation}
+            disabled={isDetecting}
+            className="flex items-center space-x-1.5 text-xs text-[#C8B8A0] hover:text-[#F5E9D3] bg-[#120F0D] hover:bg-[#1A1512] px-3 py-1.5 rounded-xl border border-[#382E24] cursor-pointer transition-all disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-[#E8A838] ${isDetecting ? 'animate-spin' : ''}`} />
+            <span>{isDetecting ? 'Buscando GPS...' : 'Atualizar GPS'}</span>
+          </button>
         </div>
       </div>
 

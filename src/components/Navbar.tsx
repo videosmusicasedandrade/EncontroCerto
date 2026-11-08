@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Heart, Coins, Bell, Shield, Settings, User, MessageCircle, Gamepad2, Compass, Home, Trophy, MapPin, Globe2 } from 'lucide-react';
 import { UserProfile, CertcoinLote, NotificacaoPush, EstadoConfig } from '../types';
-import { StateSelectorModal } from './StateSelectorModal';
 
 interface NavbarProps {
   currentUser: UserProfile | null;
@@ -28,8 +27,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenNotifications,
   onlineCount,
 }) => {
-  const [showStateModal, setShowStateModal] = useState(false);
-
   const tempLotes = lotes.filter((l) => l.tipo === 'temp');
   const totalTemp = tempLotes.reduce((acc, l) => acc + l.quantidade, 0);
 
@@ -37,7 +34,6 @@ export const Navbar: React.FC<NavbarProps> = ({
     .filter((l) => l.tipo === 'vitalicio')
     .reduce((acc, l) => acc + l.quantidade, 0);
 
-  // Calcula dias para expiração do lote temporário mais antigo
   const getMinDaysLeft = () => {
     if (tempLotes.length === 0) return 30;
     const now = new Date().getTime();
@@ -90,7 +86,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             </div>
 
-            {/* Desktop Navigation Bar (Prompt 1.5: Início, Mensagens, Jogos, Perfil, Configurações) */}
+            {/* Desktop Navigation Bar */}
             <nav className="hidden md:flex items-center space-x-1 bg-[#120F0D] p-1 rounded-2xl border border-[#382E24]">
               <button
                 onClick={() => setActiveTab('feed')}
@@ -162,52 +158,40 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
             </nav>
 
-            {/* Right Actions: Certcoins, Notifications, Profile */}
+            {/* Right Actions */}
             <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
-              {/* Header Certcoins Display (Prompt 1.4: "💛 X Certcoins (expiram em Z dias) | 💎 Y Vitalícios") */}
               <button
                 onClick={onOpenCertcoins}
                 className="flex items-center space-x-1.5 bg-[#2A231D] hover:bg-[#382E24] border border-[#E8A838]/40 px-3 py-1.5 rounded-full shadow-xs transition-transform active:scale-95 cursor-pointer"
-                title="Clique para ver os detalhes dos seus Certcoins"
               >
-                <Coins className="w-4 h-4 text-[#E8A838] shrink-0" />
-                <div className="text-[10px] sm:text-xs font-black text-[#F5E9D3] whitespace-nowrap">
-                  <span>💛 {totalTemp} Certcoins (expiram em {expiraDias} dias)</span>
-                  <span className="mx-1 text-[#E8A838]">|</span>
-                  <span>💎 {totalVitalicio} Vitalícios</span>
-                </div>
-              </button>
-
-              {/* Notifications Bell */}
-              <button
-                onClick={onOpenNotifications}
-                className="relative p-2 rounded-full hover:bg-[#2A231D] text-[#C8B8A0] transition-colors"
-                title="Notificações"
-              >
-                <Bell className="w-5 h-5" />
-                {unreadNotifs > 0 && (
-                  <span className="absolute top-1 right-1 w-4 h-4 bg-[#D1704A] text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-bounce">
-                    {unreadNotifs}
+                <Coins className="w-4 h-4 text-[#E8A838] animate-bounce" />
+                <span className="text-xs font-black text-[#F5E9D3]">
+                  {totalTemp + totalVitalicio} <span className="hidden sm:inline">Certcoins</span>
+                </span>
+                {totalTemp > 0 && (
+                  <span className="text-[10px] text-[#A89880] font-medium hidden md:inline">
+                    (expiram em {expiraDias}d)
                   </span>
                 )}
               </button>
 
-              {/* Profile Avatar */}
-              {currentUser && (
-                <div
-                  onClick={() => setActiveTab('profile')}
-                  className="w-10 h-10 rounded-full overflow-hidden border-2 border-[#E8A838] cursor-pointer shadow-sm hover:opacity-95 transition-opacity shrink-0"
-                  title="Meu Espaço / Perfil"
-                >
-                  <img src={currentUser.foto} alt={currentUser.nome} className="w-full h-full object-cover" />
-                </div>
-              )}
+              <button
+                onClick={onOpenNotifications}
+                className="relative p-2 rounded-full bg-[#2A231D] hover:bg-[#382E24] border border-[#382E24] text-[#C8B8A0] hover:text-[#F5E9D3] transition-colors cursor-pointer"
+              >
+                <Bell className="w-4 h-4" />
+                {unreadNotifs > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center shadow-xs">
+                    {unreadNotifs}
+                  </span>
+                )}
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Mobile Bottom Navigation (Prompt 1.5: 🏠 Início | 💬 Mensagens | 🎮 Jogos | 💛 Perfil | ⚙️ Configurações) */}
-        <div className="md:hidden flex items-center justify-around bg-[#1E1915] border-t border-[#382E24] py-2 px-1 fixed bottom-0 left-0 right-0 z-40">
+        {/* Mobile Navigation Bar */}
+        <div className="md:hidden flex items-center justify-around bg-[#18130F] border-t border-[#382E24] py-2 px-1">
           <button
             onClick={() => setActiveTab('feed')}
             className={`flex flex-col items-center text-[10px] font-black ${
@@ -224,7 +208,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <MessageCircle className="w-4 h-4 mb-0.5" />
-            <span>💬 Mensagens</span>
+            <span>💬 Conversas</span>
           </button>
           <button
             onClick={() => setActiveTab('games')}

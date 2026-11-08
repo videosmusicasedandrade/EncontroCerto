@@ -16,11 +16,11 @@ import { AdSenseCompliance } from './components/AdSenseCompliance';
 import { CookieBanner } from './components/CookieBanner';
 import { Footer } from './components/Footer';
 import { CertcoinSpendModal } from './components/CertcoinSpendModal';
-import { StateSelectorModal } from './components/StateSelectorModal';
+import { LocationBanner } from './components/LocationBanner';
 import { UserProfile, CertcoinLote, Postagem, Match, Mensagem, Nota, Denuncia, NotificacaoPush } from './types';
 import { MOCK_USERS, INITIAL_POSTS, INITIAL_LOTES, INITIAL_MATCHES, INITIAL_MESSAGES } from './lib/store';
 import { getEstadoConfig } from './lib/estados';
-import { detectUserLocation, ESTADOS_COORDENADAS } from './lib/geolocation';
+import { detectUserLocation, LocationDetectionResult, ESTADOS_COORDENADAS } from './lib/geolocation';
 
 function safeGetJSON<T>(key: string, fallback: T): T {
   try {
@@ -114,41 +114,49 @@ export default function App() {
     setTimeout(() => setToastMsg(null), 3000);
   };
 
-  const [geoNotice, setGeoNotice] = useState<{
-    show: boolean;
-    nome: string;
-    sigla: string;
-    emblem: string;
-    cidade?: string;
-    metodo: string;
-  } | null>(null);
+  const [locationResult, setLocationResult] = useState<LocationDetectionResult | null>(null);
 
-  // Detecção Automática de Localização no Carregamento do Site
+  // Detecção Automática de Localização com GPS de Alta Precisão no Carregamento
   useEffect(() => {
     let active = true;
 
     detectUserLocation((detected) => {
       if (!active) return;
+      setLocationResult(detected);
+
+      // Prioridade máxima para o GPS real
+      let activeSigla = 'MG';
+      const isManual = localStorage.getItem('encontro_certo_manual_estado') === 'true';
       const savedSigla = safeGetJSON<string | null>('encontro_certo_estado', null);
-      const activeSigla = savedSigla || detected.sigla;
+
+      if (detected.metodo === 'gps') {
+        activeSigla = detected.sigla;
+        localStorage.setItem('encontro_certo_estado', JSON.stringify(activeSigla));
+      } else if (savedSigla && isManual) {
+        activeSigla = savedSigla;
+      } else {
+        // Fallback seguro: sempre Minas Gerais, nunca estados aleatórios
+        activeSigla = detected.sigla || 'MG';
+      }
 
       setCurrentEstadoSigla(activeSigla);
-      const cfg = getEstadoConfig(activeSigla);
 
-      setGeoNotice({
-        show: true,
-        nome: detected.nome,
-        sigla: detected.sigla,
-        emblem: cfg.emblem,
-        cidade: detected.cidade,
-        metodo: detected.metodo === 'gps' ? 'GPS do Dispositivo' : 'Conexão de Rede',
-      });
+      if (currentUser) {
+        const coords = ESTADOS_COORDENADAS[activeSigla];
+        const updated = {
+          ...currentUser,
+          estado_sigla: activeSigla,
+          cidade: detected.cidade || currentUser.cidade,
+          latitude: detected.latitude ?? coords?.lat ?? currentUser.latitude,
+          longitude: detected.longitude ?? coords?.lng ?? currentUser.longitude,
+        };
+        setCurrentUser(updated);
+        setUsuarios((prev) => prev.map((u) => (u.id === currentUser.id ? updated : u)));
+      }
 
-      setTimeout(() => {
-        if (active) {
-          setGeoNotice((prev) => (prev ? { ...prev, show: false } : null));
-        }
-      }, 6000);
+      if (detected.metodo === 'gps') {
+        showSpendToast(`📍 GPS Ativo: ${detected.cidade || detected.nome} (${detected.sigla})! 💛`);
+      }
     });
 
     return () => {
@@ -156,9 +164,31 @@ export default function App() {
     };
   }, []);
 
+  const handleLocationUpdated = (loc: LocationDetectionResult) => {
+    setLocationResult(loc);
+    if (loc.sigla) {
+      setCurrentEstadoSigla(loc.sigla);
+      localStorage.setItem('encontro_certo_estado', JSON.stringify(loc.sigla));
+      if (currentUser) {
+        const coords = ESTADOS_COORDENADAS[loc.sigla];
+        const updated = {
+          ...currentUser,
+          estado_sigla: loc.sigla,
+          cidade: loc.cidade || currentUser.cidade,
+          latitude: loc.latitude ?? coords?.lat ?? currentUser.latitude,
+          longitude: loc.longitude ?? coords?.lng ?? currentUser.longitude,
+        };
+        setCurrentUser(updated);
+        setUsuarios((prev) => prev.map((u) => (u.id === currentUser.id ? updated : u)));
+      }
+      showSpendToast(`📍 Localização definida: ${loc.cidade || loc.nome} (${loc.sigla})! 💛`);
+    }
+  };
+
   const handleSelectEstado = (sigla: string) => {
     setCurrentEstadoSigla(sigla);
     localStorage.setItem('encontro_certo_estado', JSON.stringify(sigla));
+    localStorage.setItem('encontro_certo_manual_estado', 'true');
     if (currentUser) {
       const coords = ESTADOS_COORDENADAS[sigla];
       const updated = {
@@ -170,6 +200,7 @@ export default function App() {
       setCurrentUser(updated);
       setUsuarios((prev) => prev.map((u) => (u.id === currentUser.id ? updated : u)));
     }
+    showSpendToast(`Estado alterado para ${sigla}! 💛`);
   };
 
   // Notificação Automática do Desafio Diário (12:20 e 20:20)
@@ -630,16 +661,22 @@ export default function App() {
     showSpendToast('Pretendente passado com carinho 💛');
   };
 
-  // PROTEÇÃO DE ROTAS (Prompt 1.1: Sem login -> redireciona para login com mensagem: "Precisa entrar primeiro pra ver teu espaço 💛")
   if (!currentUser) {
     return (
-      <LoginScreen
-        estadoConfig={estadoConfig}
-        onSelectEstado={handleSelectEstado}
-        onLogin={handleLogin}
-        onRegister={handleRegister}
-        protectionMsg={routeProtectionMsg || 'Precisa entrar primeiro pra ver teu espaço 💛'}
-      />
+      <>
+        <LocationBanner
+          currentEstadoSigla={currentEstadoSigla}
+          locationResult={locationResult}
+          onLocationUpdated={handleLocationUpdated}
+        />
+        <LoginScreen
+          estadoConfig={estadoConfig}
+          onSelectEstado={handleSelectEstado}
+          onLogin={handleLogin}
+          onRegister={handleRegister}
+          protectionMsg={routeProtectionMsg || 'Precisa entrar primeiro pra ver teu espaço 💛'}
+        />
+      </>
     );
   }
 
@@ -670,6 +707,13 @@ export default function App() {
         onOpenCertcoins={() => setShowCertcoinsModal(true)}
         onOpenNotifications={() => setShowNotifsModal(true)}
         onlineCount={12}
+      />
+
+      {/* Banner de Autorização e Detecção Precisa de GPS */}
+      <LocationBanner
+        currentEstadoSigla={currentEstadoSigla}
+        locationResult={locationResult}
+        onLocationUpdated={handleLocationUpdated}
       />
 
       <main className="transition-all duration-300">
