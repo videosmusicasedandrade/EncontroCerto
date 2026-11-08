@@ -69,6 +69,8 @@ export interface Match {
   usuario2_id: string;
   criado_em: string;
   outro_usuario?: UserProfile;
+  isEncontroACegas?: boolean;
+  isRevelado?: boolean;
 }
 
 export interface Mensagem {

@@ -1,7 +1,8 @@
-import React from 'react';
-import { Settings, Bell, MapPin, Eye, DollarSign, Shield, FileText, Info } from 'lucide-react';
+import React, { useState } from 'react';
+import { Settings, Bell, MapPin, Eye, DollarSign, Shield, Globe2, LogOut } from 'lucide-react';
 import { UserProfile, EstadoConfig } from '../types';
 import { StateSelector } from './StateSelector';
+import { StateSelectorModal } from './StateSelectorModal';
 
 interface SettingsViewProps {
   currentUser: UserProfile;
@@ -20,9 +21,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onOpenProfileEdit,
   onOpenCompliance,
 }) => {
+  const [showStateModal, setShowStateModal] = useState(false);
+
   return (
-    <div className="max-w-2xl mx-auto py-6 px-4 space-y-6">
-      {/* State Selector */}
+    <div className="max-w-2xl mx-auto py-6 px-4 space-y-6 text-[#F5E9D3]">
+      {/* State Selector Card */}
       <StateSelector
         currentEstadoSigla={estadoConfig.sigla}
         onSelectEstado={onSelectEstado}
@@ -32,28 +35,44 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <div>
           <h2 className="text-xl font-black text-[#F5E9D3] flex items-center space-x-2">
             <Settings className="w-5 h-5" style={{ color: estadoConfig.cor }} />
-            <span>Configurações & Preferências ({estadoConfig.nome})</span>
+            <span>⚙️ Configurações & Preferências ({estadoConfig.nome})</span>
           </h2>
           <p className="text-xs text-[#C8B8A0] mt-0.5">
             Personalize sua experiência no Encontro Certo Brasil.
           </p>
         </div>
 
-        {/* Edit Profile button */}
+        {/* Localização Automática */}
         <div className="p-4 rounded-2xl bg-[#2A231D] border border-[#382E24] flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <Globe2 className="w-5 h-5" style={{ color: estadoConfig.cor }} />
+            <div>
+              <h4 className="font-bold text-sm text-[#F5E9D3]">Localização Automática 📍</h4>
+              <p className="text-xs text-[#C8B8A0]">
+                Definida automaticamente ({estadoConfig.nome} - {estadoConfig.sigla}) via GPS/IP
+              </p>
+            </div>
+          </div>
+          <span className="px-3 py-1.5 rounded-xl bg-[#120F0D] text-[11px] font-bold text-[#E8A838] border border-[#382E24]">
+            Automático
+          </span>
+        </div>
+
+        {/* 2. Editar Perfil */}
+        <div className="p-4 rounded-2xl bg-[#120F0D] border border-[#382E24] flex items-center justify-between">
           <div>
             <h4 className="font-bold text-sm text-[#F5E9D3]">Meu Perfil</h4>
-            <p className="text-xs text-[#C8B8A0]">Alterar fotos, descrição e preferências (estado fixado por localização)</p>
+            <p className="text-xs text-[#C8B8A0]">Alterar fotos, descrição e preferências</p>
           </div>
           <button
             onClick={onOpenProfileEdit}
-            className="px-4 py-2 golden-button rounded-xl text-xs"
+            className="px-4 py-2 bg-[#2A231D] text-[#E8A838] border border-[#E8A838]/40 hover:bg-[#382E24] rounded-xl text-xs font-bold"
           >
             Editar Perfil {estadoConfig.emblem}
           </button>
         </div>
 
-        {/* Visibility Toggle */}
+        {/* 3. Visibilidade na Busca */}
         <div className="flex items-center justify-between p-4 rounded-2xl bg-[#120F0D] border border-[#382E24]">
           <div className="flex items-center space-x-3">
             <Eye className="w-5 h-5" style={{ color: estadoConfig.cor }} />
@@ -71,7 +90,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           />
         </div>
 
-        {/* Search Radius */}
+        {/* 4. Raio de Busca */}
         <div className="p-4 rounded-2xl bg-[#120F0D] border border-[#382E24] space-y-3">
           <div className="flex items-center space-x-3">
             <MapPin className="w-5 h-5" style={{ color: estadoConfig.cor }} />
@@ -94,12 +113,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </select>
         </div>
 
-        {/* Push Notifications */}
+        {/* 5. Notificações Push */}
         <div className="flex items-center justify-between p-4 rounded-2xl bg-[#120F0D] border border-[#382E24]">
           <div className="flex items-center space-x-3">
             <Bell className="w-5 h-5" style={{ color: estadoConfig.cor }} />
             <div>
-              <h4 className="font-bold text-sm text-[#F5E9D3]">Notificações Push com PNL</h4>
+              <h4 className="font-bold text-sm text-[#F5E9D3]">Notificações</h4>
               <p className="text-xs text-[#C8B8A0]">Receber avisos carinhosos quando alguém te mandar mensagem ou match</p>
             </div>
           </div>
@@ -116,7 +135,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           />
         </div>
 
-        {/* AdSense & Legal Section */}
+        {/* AdSense & Transparência */}
         {onOpenCompliance && (
           <div className="p-4 rounded-2xl bg-[#2A231D] border border-[#382E24] space-y-3">
             <div className="flex items-center justify-between">
@@ -126,7 +145,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   Google AdSense & Transparência LGPD
                 </h4>
                 <p className="text-xs text-[#C8B8A0]">
-                  Gere receita com anúncios e consulte Políticas de Privacidade, Termos e Arquivo ads.txt
+                  Consulte Políticas de Privacidade, Termos e Arquivo ads.txt
                 </p>
               </div>
             </div>
@@ -151,21 +170,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         )}
 
-        {/* Logout / Switch Account with State Farewell phrase */}
+        {/* 6. Sair (Prompt 3.1: "Ir embora… volta quando quiser 💛") */}
         <div className="pt-4 border-t border-[#382E24] space-y-2">
-          <p className="text-xs text-center text-[#C8B8A0] italic">
-            "{estadoConfig.despedida}"
-          </p>
           <button
             onClick={() => {
-              if (confirm(`${estadoConfig.despedida}\n\nDeseja realmente sair da sua conta?`)) {
+              if (confirm(`Deseja realmente sair da sua conta?\n\nIr embora… volta quando quiser 💛`)) {
                 localStorage.removeItem('encontro_certo_current_user');
                 window.location.reload();
               }
             }}
-            className="w-full py-3 rounded-2xl bg-[#2A231D] hover:bg-red-950/40 text-[#D1704A] font-extrabold text-xs border border-[#382E24] transition-colors"
+            className="w-full py-3.5 rounded-2xl bg-[#2A231D] hover:bg-red-950/40 text-[#D1704A] font-black text-xs border border-[#382E24] transition-colors flex items-center justify-center space-x-2"
           >
-            Sair da Conta 🚪
+            <LogOut className="w-4 h-4 text-[#D1704A]" />
+            <span>Ir embora… volta quando quiser 💛</span>
           </button>
         </div>
       </div>

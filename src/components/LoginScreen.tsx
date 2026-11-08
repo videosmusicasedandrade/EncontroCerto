@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Heart, Sparkles, Lock, Mail, User, MapPin, ArrowRight, ArrowLeft, CheckCircle2, Loader2 } from 'lucide-react';
+import { Heart, Sparkles, Lock, Mail, MapPin, ArrowRight } from 'lucide-react';
 import { UserProfile, EstadoConfig } from '../types';
-import { ESTADOS_BRASIL, getEstadoConfig } from '../lib/estados';
+import { getEstadoConfig } from '../lib/estados';
 
 interface LoginScreenProps {
   estadoConfig: EstadoConfig;
@@ -9,6 +9,7 @@ interface LoginScreenProps {
   onLogin: (email: string, pass: string) => void;
   onRegister: (profile: Omit<UserProfile, 'id' | 'idade' | 'criado_em'>) => void;
   protectionMsg?: string;
+  onOpenStateModal?: () => void;
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({
@@ -17,14 +18,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   onLogin,
   onRegister,
   protectionMsg,
+  onOpenStateModal,
 }) => {
   const [isRegistering, setIsRegistering] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [loadingText, setLoadingText] = useState(estadoConfig.aoEntrar);
+  const [loadingText, setLoadingText] = useState('Buscando alguém especial…');
 
-  // Login state
+  // Login state (sem exibir senhas soltas na tela)
   const [email, setEmail] = useState('eddornelas02@gmail.com');
-  const [senha, setSenha] = useState('Edinho55@');
+  const [senha, setSenha] = useState('demo123456');
   const [loginError, setLoginError] = useState('');
 
   // Register multi-step state (Passo 1 a 4)
@@ -42,35 +44,28 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const [descricao, setDescricao] = useState(estadoConfig.saudacao);
   const [tipoPerfil, setTipoPerfil] = useState<'publico' | 'privado'>('publico');
 
-  const handleEstadoChange = (sigla: string) => {
-    setEstadoSigla(sigla);
-    onSelectEstado(sigla);
-    const cfg = getEstadoConfig(sigla);
-    setDescricao(cfg.saudacao);
-  };
-
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setLoadingText(estadoConfig.aoEntrar);
+    setLoadingText('Entrando na prosa… ☕');
 
     setTimeout(() => {
       const cleanEmail = email.trim().toLowerCase();
       const cleanSenha = senha.trim();
-      onLogin(cleanEmail || 'eddornelas02@gmail.com', cleanSenha || 'Edinho55@');
+      onLogin(cleanEmail || 'eddornelas02@gmail.com', cleanSenha || 'demo123456');
       setIsLoading(false);
-    }, 700);
+    }, 1200);
   };
 
   const triggerTestAccountLogin = () => {
     setEmail('eddornelas02@gmail.com');
-    setSenha('Edinho55@');
+    setSenha('demo123456');
     setIsLoading(true);
-    setLoadingText('Buscando alguém especial… ' + estadoConfig.emblem);
+    setLoadingText('Entrando na prosa… ☕');
     setTimeout(() => {
-      onLogin('eddornelas02@gmail.com', 'Edinho55@');
+      onLogin('eddornelas02@gmail.com', 'demo123456');
       setIsLoading(false);
-    }, 800);
+    }, 1200);
   };
 
   const handleNextStep = (e: React.FormEvent) => {
@@ -78,9 +73,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     if (registerStep < 4) {
       setRegisterStep((prev) => prev + 1);
     } else {
-      // Final step submit
       setIsLoading(true);
-      setLoadingText('Criando seu espaço com carinho… ' + estadoConfig.emblem);
+      setLoadingText('Buscando alguém especial… ' + estadoConfig.emblem);
       setTimeout(() => {
         onRegister({
           nome: nome.trim() || 'Pessoa do Coração',
@@ -99,7 +93,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           exibir_na_busca: true,
         });
         setIsLoading(false);
-      }, 900);
+      }, 1200);
     }
   };
 
@@ -108,16 +102,24 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=600&q=80',
     'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=600&q=80',
     'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=600&q=80',
-    'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=600&q=80',
   ];
 
   return (
-    <div className="min-h-screen bg-[#120F0D] text-[#F5E9D3] flex items-center justify-center p-4 sm:p-6 transition-all duration-300">
-      <div className="w-full max-w-md bg-[#1E1915] rounded-3xl p-6 sm:p-8 border border-[#382E24] shadow-[0_8px_30px_rgba(232,168,56,0.12)] space-y-6 relative overflow-hidden">
+    <div className="min-h-screen bg-[#120F0D] text-[#F5E9D3] flex flex-col items-center justify-center p-4 sm:p-6 transition-all duration-300">
+      
+      {/* Top Bar for Location Indicator */}
+      <div className="w-full max-w-md mb-3 flex items-center justify-[#C8B8A0] text-xs text-[#C8B8A0] px-2">
+        <span className="font-bold flex items-center gap-1">
+          <MapPin className="w-3.5 h-3.5 text-[#E8A838]" />
+          <span>Sua região: <strong className="text-[#F5E9D3]">{estadoConfig.nome} ({estadoConfig.sigla})</strong></span>
+        </span>
+      </div>
+
+      <div className="w-full max-w-md bg-[#1E1915] rounded-3xl p-6 sm:p-8 border border-[#382E24] shadow-[0_8px_30px_rgba(232,168,56,0.08)] space-y-6 relative overflow-hidden">
         
         {/* Loading Overlay */}
         {isLoading && (
-          <div className="absolute inset-0 z-30 bg-[#120F0D]/90 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center space-y-4 animate-fadeIn">
+          <div className="absolute inset-0 z-30 bg-[#120F0D]/95 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center space-y-4 animate-fadeIn">
             <div
               className="w-16 h-16 rounded-full flex items-center justify-center animate-heartbeat shadow-lg"
               style={{ background: `linear-gradient(135deg, ${estadoConfig.cor} 0%, #D1704A 100%)` }}
@@ -129,23 +131,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             </p>
           </div>
         )}
-
-        {/* State Badge in Login Header (Locked to Geolocation) */}
-        <div className="flex items-center justify-between pb-2 border-b border-[#382E24]">
-          <div className="flex items-center space-x-1.5">
-            <MapPin className="w-3.5 h-3.5" style={{ color: estadoConfig.cor }} />
-            <span className="text-[11px] font-black text-[#C8B8A0] uppercase">Sua Localização:</span>
-          </div>
-          <div
-            className="flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-black border bg-[#120F0D]"
-            style={{ borderColor: estadoConfig.cor }}
-            title="Localização detectada automaticamente pelo seu GPS ou conexão"
-          >
-            <span>{estadoConfig.emblem}</span>
-            <span style={{ color: estadoConfig.cor }}>{estadoConfig.nome} ({estadoConfig.sigla})</span>
-            <Lock className="w-3 h-3 text-[#C8B8A0]/70" />
-          </div>
-        </div>
 
         {/* Header Logo & Dynamic State Phrase */}
         <div className="text-center space-y-2">
@@ -162,13 +147,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             Encontro Certo
           </h1>
           <p className="text-xs font-extrabold text-[#C8B8A0] px-2" style={{ color: estadoConfig.cor }}>
-            {estadoConfig.apresentacao} {estadoConfig.emblem}
+            {estadoConfig.saudacao}
           </p>
         </div>
 
         {/* Protection message if redirected */}
         {protectionMsg && (
-          <div className="p-3 bg-[#2A231D] border border-[#E8A838]/40 rounded-2xl text-xs text-[#E8A838] font-bold text-center">
+          <div className="p-3.5 bg-[#2A231D] border border-[#E8A838]/50 rounded-2xl text-xs text-[#E8A838] font-bold text-center animate-fadeIn shadow-xs">
             {protectionMsg}
           </div>
         )}
@@ -249,24 +234,38 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             <button
               type="button"
               onClick={triggerTestAccountLogin}
-              className="w-full py-3 bg-[#2A231D] hover:bg-[#382E24] text-[#E8A838] font-black text-xs rounded-2xl border border-[#E8A838]/40 transition-all flex items-center justify-center space-x-2 shadow-xs group"
+              disabled={isLoading}
+              className="w-full py-3 bg-[#2A231D] hover:bg-[#382E24] text-[#E8A838] font-black text-xs rounded-2xl border border-[#E8A838]/40 transition-all flex items-center justify-center space-x-2 shadow-xs group disabled:opacity-50"
             >
               <Sparkles className="w-4 h-4 text-[#F0C040] group-hover:rotate-12 transition-transform" />
-              <span>Entrar com Conta de Teste (1 Clique) ☕</span>
+              <span>Entrar com Conta de Teste ☕</span>
             </button>
 
             {/* BOTÃO ENTRAR PRINCIPAL */}
             <button
               type="submit"
-              className="w-full py-3.5 golden-button rounded-2xl text-sm shadow-md active:scale-98"
+              disabled={isLoading}
+              className="w-full py-3.5 golden-button rounded-2xl text-sm font-black shadow-md active:scale-98 disabled:opacity-50 flex items-center justify-center space-x-2"
             >
-              Entrar na Prosa ☕
+              <span>{isLoading ? 'Entrando na prosa… ☕' : 'Entrar na Prosa ☕'}</span>
             </button>
+
+            {/* Link para escolher outro estado */}
+            {onOpenStateModal && (
+              <div className="text-center pt-2">
+                <button
+                  type="button"
+                  onClick={onOpenStateModal}
+                  className="text-xs text-[#C8B8A0] hover:text-[#E8A838] transition-colors font-bold"
+                >
+                  Não é este o meu estado? Clica aqui 💛
+                </button>
+              </div>
+            )}
           </form>
         ) : (
-          /* FORMULÁRIO DE CADASTRO MULTI-PASSO (Passos 1 a 4) */
+          /* FORMULÁRIO DE CADASTRO MULTI-PASSO */
           <form onSubmit={handleNextStep} className="space-y-4">
-            {/* Header de Progresso do Cadastro */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs font-extrabold">
                 <span className="text-[#E8A838]">Passo {registerStep} de 4</span>
@@ -322,15 +321,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               <div className="space-y-4 animate-fadeIn">
                 <div className="p-3 bg-[#120F0D] rounded-2xl border border-[#382E24] flex items-center justify-between">
                   <div>
-                    <span className="text-[10px] uppercase font-black text-[#C8B8A0] block">Estado Detectado (Fixo)</span>
+                    <span className="text-[10px] uppercase font-black text-[#C8B8A0] block">Estado Selecionado</span>
                     <span className="text-sm font-black text-[#F5E9D3] flex items-center space-x-1.5 mt-0.5">
                       <span>{estadoConfig.emblem}</span>
                       <span style={{ color: estadoConfig.cor }}>{estadoConfig.nome} ({estadoConfig.sigla})</span>
                     </span>
                   </div>
-                  <span className="px-2.5 py-1 rounded-lg bg-[#2A231D] text-[10px] font-bold text-[#E8A838] border border-[#382E24] flex items-center space-x-1">
-                    <Lock className="w-3 h-3" />
-                    <span>Por Localização</span>
+                  <span className="px-2 py-1 rounded-lg bg-[#2A231D] text-[10px] font-bold text-[#E8A838] border border-[#382E24]">
+                    GPS/IP Automático
                   </span>
                 </div>
 
@@ -357,7 +355,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                       type="text"
                       value={bairro}
                       onChange={(e) => setBairro(e.target.value)}
-                      placeholder="Savassi"
+                      placeholder="Centro"
                       className="w-full px-3 py-2.5 rounded-xl border border-[#382E24] bg-[#120F0D] text-xs text-[#F5E9D3]"
                     />
                   </div>
@@ -426,7 +424,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               </div>
             )}
 
-            {/* PASSO 4: Apresentação e Privacidade */}
+            {/* PASSO 4: Apresentação */}
             {registerStep === 4 && (
               <div className="space-y-4 animate-fadeIn">
                 <div>
@@ -474,7 +472,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               </div>
             )}
 
-            {/* Botões de Navegação entre Passos */}
             <div className="flex items-center space-x-2 pt-2">
               {registerStep > 1 && (
                 <button
@@ -487,9 +484,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               )}
               <button
                 type="submit"
-                className="flex-1 py-3.5 golden-button rounded-2xl text-xs sm:text-sm shadow-md flex items-center justify-center space-x-2"
+                disabled={isLoading}
+                className="flex-1 py-3.5 golden-button rounded-2xl text-xs sm:text-sm font-black shadow-md flex items-center justify-center space-x-2 disabled:opacity-50"
               >
-                <span>{registerStep === 4 ? 'Pronto! Agora o mundo pode te conhecer 💛' : 'Próximo Passo'}</span>
+                <span>{registerStep === 4 ? 'Pronto! Entrar na Prosa 💛' : 'Próximo Passo'}</span>
                 {registerStep < 4 && <ArrowRight className="w-4 h-4 text-[#120F0D]" />}
               </button>
             </div>

@@ -86,3 +86,20 @@ body {
   border-color: rgba(232, 168, 56, 0.3);
   box-shadow: 0 6px 16px rgba(232, 168, 56, 0.12);
 }
+
+/* Efeito de Borrão Forte para Encontro a Cegas */
+.blind-face-blur {
+  filter: blur(14px) brightness(0.8) contrast(1.1);
+  -webkit-filter: blur(14px) brightness(0.8) contrast(1.1);
+  transform: scale(1.15);
+  pointer-events: none;
+  user-select: none;
+}
+
+.blind-face-blur-deep {
+  filter: blur(28px) brightness(0.7) contrast(1.2);
+  -webkit-filter: blur(28px) brightness(0.7) contrast(1.2);
+  transform: scale(1.2);
+  pointer-events: none;
+  user-select: none;
+}

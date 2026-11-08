@@ -15,6 +15,8 @@ import { LeaderboardView } from './components/LeaderboardView';
 import { AdSenseCompliance } from './components/AdSenseCompliance';
 import { CookieBanner } from './components/CookieBanner';
 import { Footer } from './components/Footer';
+import { CertcoinSpendModal } from './components/CertcoinSpendModal';
+import { StateSelectorModal } from './components/StateSelectorModal';
 import { UserProfile, CertcoinLote, Postagem, Match, Mensagem, Nota, Denuncia, NotificacaoPush } from './types';
 import { MOCK_USERS, INITIAL_POSTS, INITIAL_LOTES, INITIAL_MATCHES, INITIAL_MESSAGES } from './lib/store';
 import { getEstadoConfig } from './lib/estados';
@@ -66,6 +68,7 @@ export default function App() {
   const [notas, setNotas] = useState<Nota[]>([]);
   const [denuncias, setDenuncias] = useState<Denuncia[]>([]);
   const [readReceipts, setReadReceipts] = useState<string[]>([]);
+  const [routeProtectionMsg, setRouteProtectionMsg] = useState<string | undefined>(undefined);
 
   const estadoConfig = getEstadoConfig(currentEstadoSigla);
 
@@ -80,10 +83,36 @@ export default function App() {
   ]);
 
   const [activeTab, setActiveTab] = useState<string>('feed');
+  const [initialActiveMatchId, setInitialActiveMatchId] = useState<string | null>(null);
+
+  // Sempre que mudar de aba ou abrir uma página nova, sobe a tela para o topo
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, [activeTab]);
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [showCertcoinsModal, setShowCertcoinsModal] = useState<boolean>(false);
   const [showNotifsModal, setShowNotifsModal] = useState<boolean>(false);
+  const [showGlobalStateModal, setShowGlobalStateModal] = useState<boolean>(false);
   const [complianceTab, setComplianceTab] = useState<'privacy' | 'terms' | 'about' | 'contact' | 'adsense' | null>(null);
+
+  // Spend Modal & Toast Notification State (Prompt 1.4)
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [spendModalConfig, setSpendModalConfig] = useState<{
+    isOpen: boolean;
+    costAmount: number;
+    actionTitle: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    costAmount: 3,
+    actionTitle: '',
+    onConfirm: () => {},
+  });
+
+  const showSpendToast = (msg = 'Feito! 💛') => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 3000);
+  };
 
   const [geoNotice, setGeoNotice] = useState<{
     show: boolean;
@@ -100,8 +129,11 @@ export default function App() {
 
     detectUserLocation((detected) => {
       if (!active) return;
-      setCurrentEstadoSigla(detected.sigla);
-      const cfg = getEstadoConfig(detected.sigla);
+      const savedSigla = safeGetJSON<string | null>('encontro_certo_estado', null);
+      const activeSigla = savedSigla || detected.sigla;
+
+      setCurrentEstadoSigla(activeSigla);
+      const cfg = getEstadoConfig(activeSigla);
 
       setGeoNotice({
         show: true,
@@ -112,26 +144,11 @@ export default function App() {
         metodo: detected.metodo === 'gps' ? 'GPS do Dispositivo' : 'Conexão de Rede',
       });
 
-      // Esconde aviso sutil após 6 segundos
       setTimeout(() => {
         if (active) {
           setGeoNotice((prev) => (prev ? { ...prev, show: false } : null));
         }
       }, 6000);
-
-      // Sincroniza usuário logado com a localização detectada
-      setCurrentUser((prevUser) => {
-        if (!prevUser) return null;
-        if (prevUser.estado_sigla === detected.sigla) return prevUser;
-        const coords = ESTADOS_COORDENADAS[detected.sigla];
-        return {
-          ...prevUser,
-          estado_sigla: detected.sigla,
-          cidade: detected.cidade || prevUser.cidade,
-          latitude: coords ? coords.lat : prevUser.latitude,
-          longitude: coords ? coords.lng : prevUser.longitude,
-        };
-      });
     });
 
     return () => {
@@ -155,7 +172,41 @@ export default function App() {
     }
   };
 
-  // Sync to localStorage
+  // Notificação Automática do Desafio Diário (12:20 e 20:20)
+  useEffect(() => {
+    const checkSchedule = () => {
+      const now = new Date();
+      const hours = now.getHours();
+      const minutes = now.getMinutes();
+
+      if ((hours === 12 && minutes === 20) || (hours === 20 && minutes === 20)) {
+        setNotificacoes((prev) => {
+          const alreadyNotified = prev.some(
+            (n) => n.titulo.includes('Desafio 12:20') && 
+            new Date(n.criado_em).toDateString() === now.toDateString() &&
+            new Date(n.criado_em).getHours() === hours
+          );
+          if (alreadyNotified) return prev;
+          return [
+            {
+              id: 'notif-desafio-' + Date.now(),
+              titulo: '📸 Desafio 12:20 / 20:20 no Ar! (+3 🪙)',
+              mensagem: 'Hora de postar no Feed! Tire/envie uma foto e escreva o que você está fazendo agora para ganhar 3 Certcoins!',
+              lida: false,
+              criado_em: new Date().toISOString(),
+            },
+            ...prev,
+          ];
+        });
+      }
+    };
+
+    checkSchedule();
+    const interval = setInterval(checkSchedule, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Sync state to localStorage
   useEffect(() => {
     localStorage.setItem('encontro_certo_usuarios', JSON.stringify(usuarios));
     localStorage.setItem('encontro_certo_lotes', JSON.stringify(lotes));
@@ -167,12 +218,12 @@ export default function App() {
     }
   }, [usuarios, lotes, posts, matches, mensagens, currentUser]);
 
-  // Handle Login with eddornelas02@gmail.com / Edinho55@
+  // Login handler
   const handleLogin = (email: string) => {
-    // Procura usuário admin ou cria um associado
     const existingAdmin = usuarios.find((u) => u.isAdmin);
     if (existingAdmin) {
       setCurrentUser(existingAdmin);
+      setRouteProtectionMsg(undefined);
       return;
     }
 
@@ -198,6 +249,7 @@ export default function App() {
     };
     setUsuarios((prev) => [newAdmin, ...prev]);
     setCurrentUser(newAdmin);
+    setRouteProtectionMsg(undefined);
   };
 
   const handleRegister = (profileData: Omit<UserProfile, 'id' | 'idade' | 'criado_em'>) => {
@@ -220,11 +272,13 @@ export default function App() {
       },
       ...prev,
     ]);
+    setRouteProtectionMsg(undefined);
   };
 
-  // Helper: Deduct Certcoins with FIFO
+  // Helper: Deduct Certcoins with FIFO (Lote temporário mais antigo primeiro)
   const deductCertcoins = (amount: number): boolean => {
     if (!currentUser) return false;
+    if (currentUser.isAdmin) return true; // Admin tem acesso ilimitado a todas as ações
     const userLotes = lotes.filter((l) => l.usuario_id === currentUser.id);
     const total = userLotes.reduce((acc, l) => acc + l.quantidade, 0);
     if (total < amount) return false;
@@ -271,45 +325,10 @@ export default function App() {
     setLotes((prev) => [novoLote, ...prev]);
   };
 
-  // Notificação Automática do Desafio Diário (12:20 e 20:20 da noite)
-  useEffect(() => {
-    const checkSchedule = () => {
-      const now = new Date();
-      const hours = now.getHours();
-      const minutes = now.getMinutes();
-
-      if ((hours === 12 && minutes === 20) || (hours === 20 && minutes === 20)) {
-        setNotificacoes((prev) => {
-          const alreadyNotified = prev.some(
-            (n) => n.titulo.includes('Desafio 12:20') && 
-            new Date(n.criado_em).toDateString() === now.toDateString() &&
-            new Date(n.criado_em).getHours() === hours
-          );
-          if (alreadyNotified) return prev;
-          return [
-            {
-              id: 'notif-desafio-' + Date.now(),
-              titulo: '📸 Desafio 12:20 / 20:20 no Ar! (+3 🪙)',
-              mensagem: 'Hora de postar no Feed! Tire/envie uma foto e escreva o que você está fazendo agora para ganhar 3 Certcoins!',
-              lida: false,
-              criado_em: new Date().toISOString(),
-            },
-            ...prev,
-          ];
-        });
-      }
-    };
-
-    checkSchedule();
-    const interval = setInterval(checkSchedule, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
   const handleCreatePost = (conteudo: string, imagem_url?: string, isDesafioDiario?: boolean) => {
     if (!currentUser) return;
 
     if (isDesafioDiario) {
-      // Recompensa de +3 Certcoins por publicar a foto do momento no desafio das 12:20 / 20:20!
       addCertcoins(3);
       const newPost: Postagem = {
         id: 'post-desafio-' + Date.now(),
@@ -334,7 +353,10 @@ export default function App() {
       return;
     }
 
-    if (!deductCertcoins(1)) return;
+    if (!deductCertcoins(1)) {
+      alert('Eita! Cê precisa de 1 Certcoin para publicar!');
+      return;
+    }
     const newPost: Postagem = {
       id: 'post-' + Date.now(),
       autor_id: currentUser.id,
@@ -344,6 +366,7 @@ export default function App() {
       autor: currentUser,
     };
     setPosts((prev) => [newPost, ...prev]);
+    showSpendToast('Feito! 💛');
   };
 
   const handleEditPost = (postId: string, novoConteudo: string) => {
@@ -362,6 +385,7 @@ export default function App() {
         return p;
       })
     );
+    showSpendToast('Feito! 💛');
   };
 
   const handleDeletePost = (postId: string) => {
@@ -380,10 +404,8 @@ export default function App() {
     addCertcoins(valor);
   };
 
-  const handleSendLike = (alvoId: string, superCerto: boolean) => {
-    const cost = superCerto ? 3 : 0;
-    if (cost > 0 && !deductCertcoins(cost)) return;
-
+  // Execute Like / Super Certo logic
+  const executeLike = (alvoId: string, superCerto: boolean) => {
     const outro = usuarios.find((u) => u.id === alvoId);
     if (!outro) return;
 
@@ -416,82 +438,42 @@ export default function App() {
     }
   };
 
-  const handleSendMessage = (
-    destinatarioId: string,
-    conteudo: string,
-    tipo: 'texto' | 'foto' | 'audio' | 'presente' = 'texto',
-    destacada: boolean = false,
-    extraData?: { imagem_url?: string; audio_duracao?: number; qtd_presente?: number }
-  ) => {
-    if (destacada && !deductCertcoins(4)) return;
+  // Send Like com confirmação para gastos >= 3 Certcoins (Prompt 1.4)
+  const handleSendLike = (alvoId: string, superCerto: boolean) => {
+    const cost = superCerto ? 3 : 0;
 
-    const novaMsg: Mensagem = {
+    if (cost >= 3) {
+      setSpendModalConfig({
+        isOpen: true,
+        costAmount: cost,
+        actionTitle: 'enviar um Super Certo (Match Garantido)',
+        onConfirm: () => {
+          if (!deductCertcoins(cost)) {
+            alert('Você não tem Certcoins suficientes para esta ação!');
+            setSpendModalConfig((prev) => ({ ...prev, isOpen: false }));
+            return;
+          }
+          executeLike(alvoId, superCerto);
+          setSpendModalConfig((prev) => ({ ...prev, isOpen: false }));
+          showSpendToast('Feito! 💛');
+        },
+      });
+      return;
+    }
+
+    executeLike(alvoId, superCerto);
+  };
+
+  const handleSendMessage = (destinatarioId: string, conteudo: string, tipo: Mensagem['tipo'] = 'texto') => {
+    const novaMensagem: Mensagem = {
       id: 'msg-' + Date.now(),
       remetente_id: currentUser!.id,
       destinatario_id: destinatarioId,
       conteudo,
       tipo,
-      destacada,
       criado_em: new Date().toISOString(),
-      ...extraData,
     };
-    setMensagens((prev) => [...prev, novaMsg]);
-
-    // Resposta automática acolhedora de Minas Gerais após 1.5s para enriquecer o histórico da conversa
-    const outro = usuarios.find((u) => u.id === destinatarioId);
-    if (outro) {
-      const mineiroReplies: Record<string, string[]> = {
-        'user-1': [
-          'Trem bão demais sô! Adorei bater esse papo contigo 💛',
-          'Pois é! Nada como um café mineiro pra alegrar a tarde.',
-          'Uai, concordo plenamente com você! Quando cê vier a Ouro Preto me avisa!',
-          'Que coisa boa! Vamos marcar aquele pão de queijo na praça sim!',
-          'Hahaha bom demais da conta! Você é muito simpático(a).'
-        ],
-        'user-2': [
-          'É isso aí meu parceiro! Aqui em Contagem o carteado e a viola comem solto!',
-          'Opa, falou e disse! Trem bão demais!',
-          'Com certeza sô! Tamo junto nessa prosa boa.',
-          'Bora sim! Vou afinar a viola pro fim de semana.'
-        ],
-        'user-3': [
-          'Que gracinha! Adorei sua mensagem 💛',
-          'Uberlândia tá de portas abertas quando você vier!',
-          'Nossa, concordo 100%! Conversar com gente de Minas é outro nível.'
-        ]
-      };
-
-      const replies = mineiroReplies[destinatarioId] || [
-        'Uai, bom demais prosear com você!',
-        'Trem bão! Um abraço bem apertado de Minas pra você 💛',
-        'Com certeza! Essa prosa tá boa demais da conta.'
-      ];
-
-      const randomReply = replies[Math.floor(Math.random() * replies.length)];
-
-      setTimeout(() => {
-        const respostaMsg: Mensagem = {
-          id: 'msg-reply-' + Date.now(),
-          remetente_id: destinatarioId,
-          destinatario_id: currentUser!.id,
-          conteudo: randomReply,
-          tipo: 'texto',
-          criado_em: new Date().toISOString(),
-        };
-        setMensagens((prev) => [...prev, respostaMsg]);
-
-        setNotificacoes((prev) => [
-          {
-            id: 'notif-' + Date.now(),
-            titulo: `${outro.nome} mandou prosa! 💌`,
-            mensagem: randomReply,
-            lida: false,
-            criado_em: new Date().toISOString(),
-          },
-          ...prev,
-        ]);
-      }, 1600);
-    }
+    setMensagens((prev) => [...prev, novaMensagem]);
   };
 
   const handleResetDemoHistory = () => {
@@ -499,7 +481,7 @@ export default function App() {
     setMatches(INITIAL_MATCHES);
     localStorage.setItem('encontro_certo_mensagens', JSON.stringify(INITIAL_MESSAGES));
     localStorage.setItem('encontro_certo_matches', JSON.stringify(INITIAL_MATCHES));
-    alert('Histórico de conversas dos últimos 3 dias restaurado com sucesso! 💛');
+    alert('Histórico de conversas restaurado com sucesso! 💛');
   };
 
   const handleClearChatHistory = (alvoId: string) => {
@@ -520,9 +502,37 @@ export default function App() {
   const handleUnlockReadReceipt = (alvoId: string) => {
     if (!deductCertcoins(5)) return;
     setReadReceipts((prev) => [...prev, alvoId]);
+    showSpendToast('Feito! 💛');
   };
 
   const handleSendGift = (alvoId: string, qtd: number) => {
+    if (qtd >= 3) {
+      setSpendModalConfig({
+        isOpen: true,
+        costAmount: qtd,
+        actionTitle: `enviar um presente de ${qtd} Certcoins`,
+        onConfirm: () => {
+          if (!deductCertcoins(qtd)) {
+            alert('Você não possui Certcoins suficientes!');
+            setSpendModalConfig((prev) => ({ ...prev, isOpen: false }));
+            return;
+          }
+          const novoLote: CertcoinLote = {
+            id: 'lote-' + Date.now(),
+            usuario_id: alvoId,
+            quantidade: qtd,
+            tipo: 'temp',
+            expira_em: new Date(Date.now() + 86400000 * 30).toISOString(),
+            criado_em: new Date().toISOString(),
+          };
+          setLotes((prev) => [novoLote, ...prev]);
+          setSpendModalConfig((prev) => ({ ...prev, isOpen: false }));
+          showSpendToast('Feito! 💛');
+        },
+      });
+      return;
+    }
+
     if (!deductCertcoins(qtd)) return;
     const novoLote: CertcoinLote = {
       id: 'lote-' + Date.now(),
@@ -533,17 +543,7 @@ export default function App() {
       criado_em: new Date().toISOString(),
     };
     setLotes((prev) => [novoLote, ...prev]);
-
-    setNotificacoes((prev) => [
-      {
-        id: 'notif-' + Date.now(),
-        titulo: 'Carinho recebido! 💛',
-        mensagem: `Olha só! Você recebeu um carinho de ${qtd} Certcoins ${estadoConfig.emblem}`,
-        lida: false,
-        criado_em: new Date().toISOString(),
-      },
-      ...prev,
-    ]);
+    showSpendToast('Feito! 💛');
   };
 
   const handleTransferCertcoins = (destinatarioId: string, quantidade: number) => {
@@ -559,34 +559,87 @@ export default function App() {
     setLotes((prev) => [novoLote, ...prev]);
   };
 
-  // Se não estiver logado, mostra a tela de Login / Cadastro
+  const handleStartBlindChat = (botUser: UserProfile) => {
+    if (!currentUser) return;
+
+    const matchId = `match-blind-${botUser.id}`;
+
+    setUsuarios((prev) => {
+      if (prev.some((u) => u.id === botUser.id)) return prev;
+      return [...prev, botUser];
+    });
+
+    setMatches((prev) => {
+      const existing = prev.find((m) => m.id === matchId || (m.usuario1_id === currentUser.id && m.usuario2_id === botUser.id));
+      if (existing) return prev;
+
+      const newMatch: Match = {
+        id: matchId,
+        usuario1_id: currentUser.id,
+        usuario2_id: botUser.id,
+        criado_em: new Date().toISOString(),
+        outro_usuario: botUser,
+        isEncontroACegas: true,
+        isRevelado: false,
+      };
+      return [newMatch, ...prev];
+    });
+
+    const msgId = `msg-blind-init-${botUser.id}`;
+    setMensagens((prev) => {
+      if (prev.some((m) => m.id === msgId)) return prev;
+      const newMsg: Mensagem = {
+        id: msgId,
+        remetente_id: botUser.id,
+        destinatario_id: currentUser.id,
+        conteudo: `Eita! Que bom te encontrar nesse Encontro a Cegas! Amei a nossa energia! Como tá sendo teu dia? ☕💛`,
+        tipo: 'texto',
+        criado_em: new Date().toISOString(),
+      };
+      return [...prev, newMsg];
+    });
+
+    setInitialActiveMatchId(matchId);
+    setActiveTab('matches');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleRevealBlindMatch = (matchId: string) => {
+    setMatches((prev) =>
+      prev.map((m) => (m.id === matchId ? { ...m, isRevelado: true } : m))
+    );
+
+    const match = matches.find((m) => m.id === matchId);
+    if (match && match.outro_usuario) {
+      const newMsg: Mensagem = {
+        id: `msg-reveal-${Date.now()}`,
+        remetente_id: match.outro_usuario.id,
+        destinatario_id: currentUser?.id || '',
+        conteudo: `🎉 DEU MATCH DE VERDADE! Revelamos nosso perfil e agora a prosa é pra valer! 💛`,
+        tipo: 'texto',
+        criado_em: new Date().toISOString(),
+      };
+      setMensagens((prev) => [...prev, newMsg]);
+    }
+
+    showSpendToast('Pretendente Revelado! Deu Match de Verdade 💛🎉');
+  };
+
+  const handlePassBlindMatch = (matchId: string) => {
+    setMatches((prev) => prev.filter((m) => m.id !== matchId));
+    showSpendToast('Pretendente passado com carinho 💛');
+  };
+
+  // PROTEÇÃO DE ROTAS (Prompt 1.1: Sem login -> redireciona para login com mensagem: "Precisa entrar primeiro pra ver teu espaço 💛")
   if (!currentUser) {
     return (
-      <>
-        {geoNotice?.show && (
-          <div className="fixed top-4 right-4 z-50 max-w-sm bg-[#1E1915] border border-[#E8A838]/50 shadow-2xl rounded-2xl p-3.5 text-[#F5E9D3] backdrop-blur-md animate-fadeIn">
-            <div className="flex items-center space-x-3">
-              <span className="text-2xl">{geoNotice.emblem}</span>
-              <div className="space-y-0.5">
-                <div className="flex items-center space-x-1.5 text-xs font-black">
-                  <span className="text-[#E8A838]">📍 Localização:</span>
-                  <span>{geoNotice.nome} ({geoNotice.sigla})</span>
-                </div>
-                <p className="text-[11px] text-[#C8B8A0]">
-                  {geoNotice.cidade ? `Detectado em ${geoNotice.cidade}. ` : ''}
-                  Identificado por {geoNotice.metodo}.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-        <LoginScreen
-          estadoConfig={estadoConfig}
-          onSelectEstado={handleSelectEstado}
-          onLogin={handleLogin}
-          onRegister={handleRegister}
-        />
-      </>
+      <LoginScreen
+        estadoConfig={estadoConfig}
+        onSelectEstado={handleSelectEstado}
+        onLogin={handleLogin}
+        onRegister={handleRegister}
+        protectionMsg={routeProtectionMsg || 'Precisa entrar primeiro pra ver teu espaço 💛'}
+      />
     );
   }
 
@@ -596,23 +649,13 @@ export default function App() {
     .map((m) => (m.usuario1_id === currentUser.id ? m.usuario2_id : m.usuario1_id));
 
   return (
-    <div className="min-h-screen bg-[#120F0D] text-[#F5E9D3] font-sans pb-20 md:pb-0">
-      {/* Floating Geolocation Detection Toast */}
-      {geoNotice?.show && (
-        <div className="fixed top-20 right-4 z-50 max-w-sm bg-[#1E1915] border border-[#E8A838]/50 shadow-2xl rounded-2xl p-3.5 text-[#F5E9D3] backdrop-blur-md animate-fadeIn">
-          <div className="flex items-center space-x-3">
-            <span className="text-2xl">{geoNotice.emblem}</span>
-            <div className="space-y-0.5">
-              <div className="flex items-center space-x-1.5 text-xs font-black">
-                <span className="text-[#E8A838]">📍 Localização:</span>
-                <span>{geoNotice.nome} ({geoNotice.sigla})</span>
-              </div>
-              <p className="text-[11px] text-[#C8B8A0]">
-                {geoNotice.cidade ? `Detectado em ${geoNotice.cidade}. ` : ''}
-                Identificado por {geoNotice.metodo}.
-              </p>
-            </div>
-          </div>
+    <div className="min-h-screen bg-[#120F0D] text-[#F5E9D3] font-sans pb-20 md:pb-0 transition-all duration-300">
+      
+      {/* Toast Notification para Gastos (Prompt 1.4: "Feito! 💛") */}
+      {toastMsg && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-[#E8A838] text-[#120F0D] font-black text-xs px-5 py-2.5 rounded-full shadow-2xl animate-bounce flex items-center space-x-2">
+          <span>✨</span>
+          <span>{toastMsg}</span>
         </div>
       )}
 
@@ -629,7 +672,7 @@ export default function App() {
         onlineCount={12}
       />
 
-      <main>
+      <main className="transition-all duration-300">
         {activeTab === 'feed' && (
           <FeedView
             currentUser={currentUser}
@@ -644,6 +687,8 @@ export default function App() {
             onEditPost={handleEditPost}
             onDeletePost={handleDeletePost}
             onSendNote={handleSendNote}
+            onNavigateToTab={(tab) => setActiveTab(tab)}
+            onStartBlindChat={handleStartBlindChat}
           />
         )}
 
@@ -675,11 +720,14 @@ export default function App() {
             mensagens={mensagens}
             lotes={currentUserLotes}
             readReceipts={readReceipts}
+            initialActiveMatchId={initialActiveMatchId}
             onSendMessage={handleSendMessage}
             onUnlockReadReceipt={handleUnlockReadReceipt}
             onSendGift={handleSendGift}
             onClearChatHistory={handleClearChatHistory}
             onResetDemoHistory={handleResetDemoHistory}
+            onRevealBlindMatch={handleRevealBlindMatch}
+            onPassBlindMatch={handlePassBlindMatch}
           />
         )}
 
@@ -728,7 +776,7 @@ export default function App() {
         )}
 
         {activeTab === 'profile' && (
-          <div className="max-w-xl mx-auto py-8 px-4 space-y-6">
+          <div className="max-w-xl mx-auto py-8 px-4 space-y-6 text-[#F5E9D3]">
             <div className="bg-[#1E1915] rounded-3xl p-6 shadow-lg border border-[#382E24] text-center space-y-4">
               <img src={currentUser.foto} alt={currentUser.nome} className="w-28 h-28 rounded-full object-cover mx-auto border-4 shadow-md" style={{ borderColor: estadoConfig.cor }} />
               <div>
@@ -740,7 +788,7 @@ export default function App() {
               </p>
               <button
                 onClick={() => setShowAuthModal(true)}
-                className="w-full py-3 golden-button rounded-xl text-sm"
+                className="w-full py-3 golden-button rounded-xl text-sm font-black"
               >
                 Editar Meu Perfil {estadoConfig.emblem}
               </button>
@@ -748,46 +796,26 @@ export default function App() {
             <MineiridadeCard
               postsCount={posts.filter((p) => p.autor_id === currentUser.id).length}
               matchesCount={matches.filter((m) => m.usuario1_id === currentUser.id || m.usuario2_id === currentUser.id).length}
+              estadoConfig={estadoConfig}
             />
           </div>
         )}
       </main>
 
-      {/* Footer & Cookie Consent */}
-      <Footer
-        estadoConfig={estadoConfig}
-        onOpenCompliance={(tab) => setComplianceTab(tab)}
-      />
+      <Footer estadoConfig={estadoConfig} onOpenCompliance={(tab) => setComplianceTab(tab)} />
 
-      <CookieBanner
-        estadoConfig={estadoConfig}
-        onOpenPrivacy={() => setComplianceTab('privacy')}
-      />
-
-      {/* Modals */}
-      {complianceTab && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md overflow-y-auto p-4 flex items-center justify-center">
-          <div className="w-full max-w-4xl my-8">
-            <AdSenseCompliance
-              estadoConfig={estadoConfig}
-              initialTab={complianceTab}
-              onClose={() => setComplianceTab(null)}
-            />
-          </div>
-        </div>
-      )}
-
-      {showAuthModal && (
+      {/* MODALS */}
+      {showAuthModal && currentUser && (
         <AuthModal
+          initialData={currentUser}
           estadoConfig={estadoConfig}
-          onSelectEstado={handleSelectEstado}
-          onCompleteProfile={(profileData) => {
-            setCurrentUser({ ...currentUser, ...profileData });
-            setUsuarios((prev) => prev.map((u) => (u.id === currentUser.id ? { ...currentUser, ...profileData } : u)));
+          onClose={() => setShowAuthModal(false)}
+          onCompleteProfile={(updates) => {
+            const updated = { ...currentUser, ...updates };
+            setCurrentUser(updated);
+            setUsuarios((prev) => prev.map((u) => (u.id === currentUser.id ? updated : u)));
             setShowAuthModal(false);
           }}
-          initialData={currentUser}
-          onClose={() => setShowAuthModal(false)}
         />
       )}
 
@@ -810,6 +838,29 @@ export default function App() {
           }
         />
       )}
+
+      {/* Spending Confirmation Modal (Prompt 1.4) */}
+      <CertcoinSpendModal
+        isOpen={spendModalConfig.isOpen}
+        costAmount={spendModalConfig.costAmount}
+        actionTitle={spendModalConfig.actionTitle}
+        lotes={currentUserLotes}
+        onConfirm={spendModalConfig.onConfirm}
+        onCancel={() => setSpendModalConfig((prev) => ({ ...prev, isOpen: false }))}
+      />
+
+      {complianceTab && (
+        <AdSenseCompliance
+          estadoConfig={estadoConfig}
+          initialTab={complianceTab}
+          onClose={() => setComplianceTab(null)}
+        />
+      )}
+
+      <CookieBanner
+        estadoConfig={estadoConfig}
+        onOpenPrivacy={() => setComplianceTab('privacy')}
+      />
     </div>
   );
 }

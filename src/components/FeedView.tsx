@@ -19,6 +19,7 @@ import {
 import { Postagem, UserProfile, CertcoinLote, Nota, EstadoConfig } from '../types';
 import { StateSelector } from './StateSelector';
 import { PnlDopamineWidget } from './PnlDopamineWidget';
+import { FridayEventWidget } from './FridayEventWidget';
 import { AdSenseUnit } from './AdSenseUnit';
 import { calcularDistancia } from '../lib/supabase';
 
@@ -35,6 +36,8 @@ interface FeedViewProps {
   onEditPost: (postId: string, novoConteudo: string) => void;
   onDeletePost: (postId: string) => void;
   onSendNote: (paraUserId: string, valor: number) => void;
+  onNavigateToTab?: (tab: string) => void;
+  onStartBlindChat?: (botUser: UserProfile) => void;
 }
 
 const PRESET_PHOTOS = [
@@ -77,6 +80,8 @@ export const FeedView: React.FC<FeedViewProps> = ({
   onEditPost,
   onDeletePost,
   onSendNote,
+  onNavigateToTab,
+  onStartBlindChat,
 }) => {
   const [filter, setFilter] = useState<'all' | 'radius' | 'followers'>('all');
   const [novoConteudo, setNovoConteudo] = useState('');
@@ -180,6 +185,16 @@ export const FeedView: React.FC<FeedViewProps> = ({
         estadoConfig={estadoConfig}
         onAddCertcoins={(amount) => onSendNote(currentUser.id, amount)}
         userName={currentUser.nome}
+      />
+
+      {/* EVENTO DE SEXTA-FEIRA (Prompt Regras do Evento) */}
+      <FridayEventWidget
+        estadoConfig={estadoConfig}
+        currentUser={currentUser}
+        onStartBlindChat={onStartBlindChat}
+        onUseBrinde={() => {
+          if (onNavigateToTab) onNavigateToTab('discover');
+        }}
       />
 
       {/* BANNER DE NOTIFICAÇÃO DO DESAFIO DIÁRIO (12:20 & 20:20 DA NOITE - GANHE +3 CERTCOINS) */}

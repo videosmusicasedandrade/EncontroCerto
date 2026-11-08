@@ -1660,7 +1660,12 @@ export const GamesView: React.FC<GamesViewProps & { activeTab: string }> = ({
       {/* XADREZ */}
       {activeGame === 'chess' && (
         <div className="fixed inset-0 z-50 bg-[#120F0D] w-screen h-screen">
-            <ChessView currentUser={currentUser} usuarios={usuarios || []} onAddCertcoins={onAddCertcoins} />
+          <ChessView
+            currentUser={currentUser}
+            usuarios={usuarios || []}
+            onAddCertcoins={onAddCertcoins}
+            onClose={() => setActiveGame('menu')}
+          />
         </div>
       )}
       {activeGame === 'agario' && (

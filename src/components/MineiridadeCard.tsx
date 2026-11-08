@@ -1,11 +1,13 @@
 import React from 'react';
 import { Award, Sparkles, MessageSquare, Heart, TrendingUp, Info } from 'lucide-react';
 import { calcularMineiridade } from '../utils/mineiridade';
+import { EstadoConfig } from '../types';
 
 interface MineiridadeCardProps {
   postsCount: number;
   matchesCount: number;
   compact?: boolean; // Se true, exibe uma versão em miniatura (para badges curtos)
+  estadoConfig?: EstadoConfig;
 }
 
 export const MineiridadeCard: React.FC<MineiridadeCardProps> = ({
