@@ -3,6 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script>
+      window.googleScriptLoaded = false;
+      function handleGoogleLoad() {
+        window.googleScriptLoaded = true;
+      }
+    </script>
     <title>Encontro Certo Brasil — Conexões Reais com o Jeitinho da Sua Terra</title>
     
     <!-- Meta tags SEO essenciais para aprovação do Google AdSense -->
@@ -32,9 +39,6 @@
 
     <!-- Script Oficial do Google AdSense (Injeção de Anúncios e Verificação de Site) -->
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1204327016318163" crossorigin="anonymous"></script>
-    
-    <!-- Google Identity Services para Login com Google -->
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
 
     <!-- Schema.org Dados Estruturados (JSON-LD) exigidos por motores de busca e AdSense -->
     <script type="application/ld+json">

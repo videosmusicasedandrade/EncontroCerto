@@ -243,41 +243,26 @@ export default function App() {
   }, [usuarios, lotes, posts, matches, mensagens, currentUser]);
 
   // Login handler
-  const handleLogin = (email: string) => {
-    const existingAdmin = usuarios.find((u) => u.isAdmin);
-    if (existingAdmin) {
-      setCurrentUser(existingAdmin);
+  const handleLogin = (email: string, pass: string) => {
+    const user = usuarios.find((u) => u.email === email && u.senha === pass);
+    if (user) {
+      const updated = { ...user, is_online: true };
+      setCurrentUser(updated);
+      setUsuarios((prev) => prev.map((u) => (u.id === user.id ? updated : u)));
       setRouteProtectionMsg(undefined);
-      return;
+      showSpendToast(`Bem-vindo de volta, ${user.nome}! 💛`);
+    } else {
+      alert('Eita sô! E-mail ou senha não conferem. Tenta de novo! ☕');
     }
-
-    const newAdmin: UserProfile = {
-      id: 'user-admin-ornelas',
-      nome: 'Edd Ornelas (Admin)',
-      nascimento: '1995-04-10',
-      idade: calculateAge('1995-04-10'),
-      cidade: 'Belo Horizonte',
-      bairro: 'Savassi',
-      estado_sigla: currentEstadoSigla || 'MG',
-      latitude: -19.932,
-      longitude: -43.938,
-      raio_busca: 50,
-      altura: 1.80,
-      tipo_corporal: 'Normal',
-      foto: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=600&q=80',
-      descricao: 'Criador do Encontro Certo Brasil. Um abraço especial pra todos!',
-      tipo_perfil: 'publico',
-      exibir_na_busca: true,
-      criado_em: new Date().toISOString(),
-      isAdmin: true,
-      is_online: true,
-    };
-    setUsuarios((prev) => [newAdmin, ...prev]);
-    setCurrentUser(newAdmin);
-    setRouteProtectionMsg(undefined);
   };
 
   const handleRegister = (profileData: Omit<UserProfile, 'id' | 'idade' | 'criado_em'>) => {
+    // Check if email already exists (for traditional registration)
+    if (profileData.email && usuarios.some(u => u.email === profileData.email)) {
+      alert('Esse e-mail já tá cadastrado por aqui, sô! Tenta entrar ou usa outro. 💛');
+      return;
+    }
+
     const newUser: UserProfile = {
       ...profileData,
       id: 'user-' + Date.now(),
@@ -299,17 +284,21 @@ export default function App() {
       ...prev,
     ]);
     setRouteProtectionMsg(undefined);
+    showSpendToast(`Bem-vindo, ${newUser.nome}! 🚀`);
   };
 
   const handleGoogleLogin = (userInfo: { name: string; email: string; picture: string }) => {
-    const existingUser = usuarios.find((u) => u.id === userInfo.email || (u.id.includes('user-') && u.nome === userInfo.name));
+    const existingUser = usuarios.find((u) => u.email === userInfo.email);
 
     if (existingUser) {
-      setCurrentUser({ ...existingUser, is_online: true });
+      const updated = { ...existingUser, is_online: true };
+      setCurrentUser(updated);
+      setUsuarios((prev) => prev.map((u) => (u.id === existingUser.id ? updated : u)));
       showSpendToast(`Bem-vindo de volta, ${existingUser.nome}! 💛`);
     } else {
       const newUser: UserProfile = {
-        id: userInfo.email,
+        id: 'google-' + userInfo.email,
+        email: userInfo.email,
         nome: userInfo.name,
         nascimento: '1998-05-20',
         idade: calculateAge('1998-05-20'),
@@ -346,6 +335,17 @@ export default function App() {
       showSpendToast(`Bem-vindo, ${newUser.nome}! 💛`);
       setShowAuthModal(true); // Open edit modal to finish profile
     }
+  };
+
+  const handleLogout = () => {
+    if (currentUser) {
+      const updated = { ...currentUser, is_online: false };
+      setUsuarios((prev) => prev.map((u) => (u.id === currentUser.id ? updated : u)));
+    }
+    setCurrentUser(null);
+    localStorage.removeItem('encontro_certo_current_user');
+    setActiveTab('feed');
+    showSpendToast('Até logo, sô! Volta logo! ☕💛');
   };
 
   // Helper: Deduct Certcoins with FIFO (Lote temporário mais antigo primeiro)
@@ -762,6 +762,7 @@ export default function App() {
         onOpenCertcoins={() => setShowCertcoinsModal(true)}
         onOpenNotifications={() => setShowNotifsModal(true)}
         onlineCount={usuarios.filter((u) => u.is_online).length}
+        onLogout={handleLogout}
       />
 
       {/* Banner de Autorização e Detecção Precisa de GPS */}
@@ -903,6 +904,7 @@ export default function App() {
               onUpdateSettings={(updates) => setCurrentUser({ ...currentUser, ...updates })}
               onOpenProfileEdit={() => setShowAuthModal(true)}
               onOpenCompliance={(tab) => setComplianceTab(tab)}
+              onLogout={handleLogout}
             />
           </div>
         )}

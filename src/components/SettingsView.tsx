@@ -11,6 +11,7 @@ interface SettingsViewProps {
   onUpdateSettings: (updates: Partial<UserProfile>) => void;
   onOpenProfileEdit: () => void;
   onOpenCompliance?: (tab: 'privacy' | 'terms' | 'about' | 'contact' | 'adsense') => void;
+  onLogout: () => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -20,6 +21,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onUpdateSettings,
   onOpenProfileEdit,
   onOpenCompliance,
+  onLogout,
 }) => {
   const [showStateModal, setShowStateModal] = useState(false);
 
@@ -174,12 +176,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <div className="pt-4 border-t border-[#382E24] space-y-2">
           <button
             onClick={() => {
-              if (confirm(`Deseja realmente sair da sua conta?\n\nIr embora… volta quando quiser 💛`)) {
-                localStorage.removeItem('encontro_certo_current_user');
-                window.location.reload();
+              try {
+                if (window.confirm('Deseja realmente sair da sua conta?\n\nIr embora… volta quando quiser 💛')) {
+                  onLogout();
+                }
+              } catch (e) {
+                onLogout();
               }
             }}
-            className="w-full py-3.5 rounded-2xl bg-[#2A231D] hover:bg-red-950/40 text-[#D1704A] font-black text-xs border border-[#382E24] transition-colors flex items-center justify-center space-x-2"
+            className="w-full py-3.5 rounded-2xl bg-[#2A231D] hover:bg-red-950/40 text-[#D1704A] font-black text-xs border border-[#382E24] transition-colors flex items-center justify-center space-x-2 cursor-pointer active:scale-95"
           >
             <LogOut className="w-4 h-4 text-[#D1704A]" />
             <span>Ir embora… volta quando quiser 💛</span>

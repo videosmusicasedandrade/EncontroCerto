@@ -80,26 +80,63 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     });
   };
 
+  const googleBtnRef = React.useRef<HTMLDivElement>(null);
+  const [googleStatus, setGoogleStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+
   useEffect(() => {
-    if ((window as any).google && !isRegistering) {
-      const initializeGoogle = () => {
-        (window as any).google.accounts.id.initialize({
-          client_id: '225118637671-ollaedj0d43dfvkg7b5nksop90l2f8id.apps.googleusercontent.com',
-          callback: handleGoogleResponse,
-        });
-        (window as any).google.accounts.id.renderButton(document.getElementById('google-login-btn'), {
-          theme: 'outline',
-          size: 'large',
-          width: '320',
-          text: 'continue_with',
-          shape: 'pill',
-        });
-      };
+    let checkInterval: number;
+    let attempts = 0;
+    
+    const initializeGoogle = () => {
+      attempts++;
+      const btnContainer = googleBtnRef.current;
       
-      // Give a small delay to ensure DOM is ready
-      setTimeout(initializeGoogle, 100);
-    }
-  }, [isRegistering]);
+      if ((window as any).google?.accounts?.id && btnContainer) {
+        try {
+          if (btnContainer.children.length > 0) {
+            setGoogleStatus('ready');
+            clearInterval(checkInterval);
+            return;
+          }
+
+          (window as any).google.accounts.id.initialize({
+            client_id: '225118637671-ollaedj0d43dfvkg7b5nksop90l2f8id.apps.googleusercontent.com',
+            callback: handleGoogleResponse,
+            auto_select: false,
+            cancel_on_tap_outside: true,
+            itp_support: true
+          });
+          
+          (window as any).google.accounts.id.renderButton(btnContainer, {
+            theme: 'filled_black',
+            size: 'large',
+            width: btnContainer.offsetWidth || 320,
+            text: 'continue_with',
+            shape: 'pill',
+            logo_alignment: 'left'
+          });
+          
+          setGoogleStatus('ready');
+          clearInterval(checkInterval);
+        } catch (err) {
+          console.error("Erro ao renderizar botão Google:", err);
+          if (attempts > 5) setGoogleStatus('error');
+        }
+      }
+      
+      if (attempts > 30) {
+        setGoogleStatus('error');
+        clearInterval(checkInterval);
+      }
+    };
+
+    initializeGoogle();
+    checkInterval = window.setInterval(initializeGoogle, 1000);
+
+    return () => {
+      clearInterval(checkInterval);
+    };
+  }, []);
 
   const triggerTestAccountLogin = () => {
     setEmail('eddornelas02@gmail.com');
@@ -231,6 +268,31 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           </button>
         </div>
 
+        {/* Google Login Section (Always Visible) */}
+        <div className="space-y-4 animate-fadeIn">
+          <div className="flex items-center space-x-3">
+            <div className="flex-1 h-[1px] bg-[#382E24]" />
+            <span className="text-[10px] font-black text-[#C8B8A0] uppercase">Prosa rápida com</span>
+            <div className="flex-1 h-[1px] bg-[#382E24]" />
+          </div>
+          
+          <div className="flex flex-col items-center justify-center min-h-[44px]">
+            <div ref={googleBtnRef}></div>
+            {googleStatus === 'loading' && (
+              <p className="text-[10px] text-[#C8B8A0] animate-pulse mt-2">Buscando botão do Google...</p>
+            )}
+            {googleStatus === 'error' && (
+              <p className="text-[10px] text-red-400 mt-2">Erro ao carregar Google. Use o e-mail abaixo. 💛</p>
+            )}
+          </div>
+
+          <div className="flex items-center space-x-3">
+            <div className="flex-1 h-[1px] bg-[#382E24]" />
+            <span className="text-[10px] font-black text-[#C8B8A0] uppercase">ou use e-mail</span>
+            <div className="flex-1 h-[1px] bg-[#382E24]" />
+          </div>
+        </div>
+
         {!isRegistering ? (
           /* FORMULÁRIO DE LOGIN */
           <form onSubmit={handleLoginSubmit} className="space-y-4">
@@ -284,18 +346,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               <Sparkles className="w-4 h-4 text-[#F0C040] group-hover:rotate-12 transition-transform" />
               <span>Entrar com Conta de Teste ☕</span>
             </button>
-
-            {/* DIVISOR OU */}
-            <div className="flex items-center space-x-3 py-2">
-              <div className="flex-1 h-[1px] bg-[#382E24]" />
-              <span className="text-[10px] font-black text-[#C8B8A0] uppercase">ou</span>
-              <div className="flex-1 h-[1px] bg-[#382E24]" />
-            </div>
-
-            {/* BOTÃO GOOGLE */}
-            <div className="flex justify-center">
-              <div id="google-login-btn"></div>
-            </div>
 
             {/* BOTÃO ENTRAR PRINCIPAL */}
             <button

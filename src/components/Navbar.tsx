@@ -1,5 +1,5 @@
 import React from 'react';
-import { Heart, Coins, Bell, Shield, Settings, User, MessageCircle, Gamepad2, Home, Flame } from 'lucide-react';
+import { Heart, Coins, Bell, Shield, Settings, User, MessageCircle, Gamepad2, Home, Flame, LogOut } from 'lucide-react';
 import { UserProfile, CertcoinLote, NotificacaoPush, EstadoConfig } from '../types';
 
 interface NavbarProps {
@@ -13,6 +13,7 @@ interface NavbarProps {
   onOpenCertcoins: () => void;
   onOpenNotifications: () => void;
   onlineCount: number;
+  onLogout: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -26,6 +27,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenCertcoins,
   onOpenNotifications,
   onlineCount,
+  onLogout,
 }) => {
   const tempLotes = lotes.filter((l) => l.tipo === 'temp');
   const totalTemp = tempLotes.reduce((acc, l) => acc + l.quantidade, 0);
@@ -180,6 +182,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                     {unreadNotifs}
                   </span>
                 )}
+              </button>
+
+              <button
+                onClick={() => {
+                  if (window.confirm('Deseja realmente sair? 💛')) {
+                    onLogout();
+                  }
+                }}
+                className="p-2 rounded-full bg-[#2A231D] hover:bg-red-950/40 border border-[#382E24] text-[#D1704A] hover:text-red-400 transition-colors cursor-pointer"
+                title="Sair"
+              >
+                <LogOut className="w-4 h-4" />
               </button>
             </div>
           </div>

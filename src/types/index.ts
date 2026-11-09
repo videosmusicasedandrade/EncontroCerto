@@ -29,6 +29,8 @@ export interface UserProfile {
   foto: string;
   fotos?: string[];
   descricao?: string;
+  email?: string;
+  senha?: string;
   tipo_perfil: 'publico' | 'privado';
   exibir_na_busca: boolean;
   criado_em: string;
