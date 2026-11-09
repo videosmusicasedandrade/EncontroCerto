@@ -18,9 +18,11 @@ import {
   Volume2,
   VolumeX,
   Music,
+  Brain,
 } from 'lucide-react';
 import { UserProfile, EstadoConfig } from '../types';
 import { ChessView } from './ChessView';
+import { MemoryGame } from './MemoryGame';
 
 interface GamesViewProps {
   currentUser: UserProfile;
@@ -202,7 +204,7 @@ export const GamesView: React.FC<GamesViewProps & { activeTab: string }> = ({
   onAddCertcoins,
   activeTab,
 }) => {
-  const [activeGame, setActiveGame] = useState<'menu' | 'agario' | 'chess'>('menu');
+  const [activeGame, setActiveGame] = useState<'menu' | 'agario' | 'chess' | 'memory'>('menu');
 
   // --- AGAR.IO STATE ---
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1653,6 +1655,20 @@ export const GamesView: React.FC<GamesViewProps & { activeTab: string }> = ({
                 <span>Aposte Certcoins</span>
               </div>
             </div>
+
+            {/* Card Memória */}
+            <div
+              onClick={() => setActiveGame('memory')}
+              className="bg-[#1E1915] hover:bg-[#2A231D] rounded-3xl p-6 border border-[#382E24] hover:border-[#E8A838]/60 cursor-pointer group transition-all flex flex-col justify-center items-center shadow-lg w-full max-w-xs"
+            >
+              <div className="w-16 h-16 rounded-3xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform border border-[#E8A838]/30 bg-[#E8A838]/10 text-[#E8A838]">
+                <Brain className="w-8 h-8" />
+              </div>
+              <h3 className="text-xl font-black text-[#F5E9D3] mb-4">Memória MG</h3>
+              <div className="text-xs font-bold text-[#C8B8A0]">
+                <span>Ganhe 10 Certcoins</span>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1667,6 +1683,15 @@ export const GamesView: React.FC<GamesViewProps & { activeTab: string }> = ({
             onClose={() => setActiveGame('menu')}
           />
         </div>
+      )}
+      {/* JOGO DA MEMÓRIA */}
+      {activeGame === 'memory' && (
+        <MemoryGame
+          onWin={(coins) => {
+            onAddCertcoins(coins);
+          }}
+          onClose={() => setActiveGame('menu')}
+        />
       )}
       {activeGame === 'agario' && (
         <div

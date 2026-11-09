@@ -255,7 +255,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
           style={{ color: estadoConfig.cor, backgroundColor: '#2A231D' }}
         >
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-          <span>12 conectados em {estadoConfig.sigla}</span>
+          <span>{usuarios.filter(u => u.is_online).length} conectados em {estadoConfig.sigla}</span>
         </div>
       </div>
 
@@ -628,35 +628,36 @@ export const FeedView: React.FC<FeedViewProps> = ({
 
       {/* Edit History Modal */}
       {showHistoryModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-zinc-900 rounded-3xl max-w-md w-full p-6 shadow-2xl border border-orange-100 dark:border-zinc-800">
-            <h3 className="text-lg font-bold text-zinc-800 dark:text-zinc-100 mb-3">
-              Histórico de Alterações 📝
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#1E1915] rounded-3xl max-w-md w-full p-6 shadow-2xl border border-[#382E24] space-y-4">
+            <h3 className="text-lg font-black text-[#F5E9D3] mb-3 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-[#E8A838]" />
+              <span>Histórico de Alterações 📝</span>
             </h3>
-            <div className="space-y-3 max-h-60 overflow-y-auto mb-4">
+            <div className="space-y-3 max-h-60 overflow-y-auto mb-4 pr-2">
               {showHistoryModal.historico && showHistoryModal.historico.length > 0 ? (
                 showHistoryModal.historico.map((h, i) => (
                   <div
                     key={i}
-                    className="p-3 bg-zinc-50 dark:bg-zinc-800 rounded-2xl text-xs space-y-1"
+                    className="p-4 bg-[#120F0D] rounded-2xl text-xs space-y-2 border border-[#382E24]"
                   >
-                    <span className="text-zinc-400">
+                    <span className="text-[#C8B8A0] font-bold">
                       {new Date(h.alterado_em).toLocaleString('pt-BR')}
                     </span>
-                    <p className="text-zinc-700 dark:text-zinc-300 line-through">
+                    <p className="text-[#C8B8A0] line-through italic opacity-60">
                       {h.conteudo_antigo}
                     </p>
                   </div>
                 ))
               ) : (
-                <p className="text-xs text-zinc-400">Nenhum histórico anterior registrado.</p>
+                <p className="text-xs text-[#C8B8A0] italic">Nenhum histórico anterior registrado.</p>
               )}
             </div>
             <button
               onClick={() => setShowHistoryModal(null)}
-              className="w-full py-2.5 bg-orange-500 text-white font-bold rounded-xl text-sm"
+              className="w-full py-3 bg-[#2A231D] text-[#F5E9D3] font-black rounded-xl text-sm border border-[#382E24] hover:bg-[#382E24] transition-colors"
             >
-              Fechar
+              Fechar Prosa
             </button>
           </div>
         </div>

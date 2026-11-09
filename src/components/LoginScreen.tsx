@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Heart, Sparkles, Lock, Mail, MapPin, ArrowRight } from 'lucide-react';
 import { UserProfile, EstadoConfig } from '../types';
 import { getEstadoConfig } from '../lib/estados';
@@ -7,6 +7,7 @@ interface LoginScreenProps {
   estadoConfig: EstadoConfig;
   onSelectEstado: (sigla: string) => void;
   onLogin: (email: string, pass: string) => void;
+  onGoogleLogin: (userInfo: { name: string; email: string; picture: string }) => void;
   onRegister: (profile: Omit<UserProfile, 'id' | 'idade' | 'criado_em'>) => void;
   protectionMsg?: string;
   onOpenStateModal?: () => void;
@@ -16,6 +17,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   estadoConfig,
   onSelectEstado,
   onLogin,
+  onGoogleLogin,
   onRegister,
   protectionMsg,
   onOpenStateModal,
@@ -56,6 +58,48 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       setIsLoading(false);
     }, 1200);
   };
+
+  const handleGoogleResponse = (response: any) => {
+    const decodeJwt = (token: string) => {
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      return JSON.parse(jsonPayload);
+    };
+
+    const user = decodeJwt(response.credential);
+    onGoogleLogin({
+      name: user.name,
+      email: user.email,
+      picture: user.picture,
+    });
+  };
+
+  useEffect(() => {
+    if ((window as any).google && !isRegistering) {
+      const initializeGoogle = () => {
+        (window as any).google.accounts.id.initialize({
+          client_id: '225118637671-ollaedj0d43dfvkg7b5nksop90l2f8id.apps.googleusercontent.com',
+          callback: handleGoogleResponse,
+        });
+        (window as any).google.accounts.id.renderButton(document.getElementById('google-login-btn'), {
+          theme: 'outline',
+          size: 'large',
+          width: '320',
+          text: 'continue_with',
+          shape: 'pill',
+        });
+      };
+      
+      // Give a small delay to ensure DOM is ready
+      setTimeout(initializeGoogle, 100);
+    }
+  }, [isRegistering]);
 
   const triggerTestAccountLogin = () => {
     setEmail('eddornelas02@gmail.com');
@@ -240,6 +284,18 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               <Sparkles className="w-4 h-4 text-[#F0C040] group-hover:rotate-12 transition-transform" />
               <span>Entrar com Conta de Teste ☕</span>
             </button>
+
+            {/* DIVISOR OU */}
+            <div className="flex items-center space-x-3 py-2">
+              <div className="flex-1 h-[1px] bg-[#382E24]" />
+              <span className="text-[10px] font-black text-[#C8B8A0] uppercase">ou</span>
+              <div className="flex-1 h-[1px] bg-[#382E24]" />
+            </div>
+
+            {/* BOTÃO GOOGLE */}
+            <div className="flex justify-center">
+              <div id="google-login-btn"></div>
+            </div>
 
             {/* BOTÃO ENTRAR PRINCIPAL */}
             <button

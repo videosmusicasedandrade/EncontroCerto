@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Heart, Camera, MapPin, Sparkles, X, Plus, Trash2 } from 'lucide-react';
 import { UserProfile, EstadoConfig } from '../types';
 import { getEstadoConfig } from '../lib/estados';
+import { ESTADOS_COORDENADAS } from '../lib/geolocation';
 
 interface AuthModalProps {
   onCompleteProfile: (profile: Omit<UserProfile, 'id' | 'idade' | 'criado_em'>) => void;
@@ -42,7 +43,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const handleAddPhoto = () => {
     if (!newPhotoUrl.trim()) return;
     if (fotosList.length >= maxPhotos) {
-      alert(`Limite de fotos atingido! Você pode adicionar até ${maxPhotos} fotos ${isVip ? '(VIP 20 fotos)' : '(Normal 6 fotos)'}.`);
+      alert(`Limite de fotos atingido sô! Você pode adicionar até ${maxPhotos} fotos ${isVip ? '(💎 VIP)' : '(Normal)'}.`);
       return;
     }
     setFotosList((prev) => [...prev, newPhotoUrl.trim()]);
@@ -59,14 +60,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     if (onSelectEstado) onSelectEstado(estadoSigla);
 
+    const coords = ESTADOS_COORDENADAS[estadoSigla] || { lat: -19.9167, lng: -43.9345 };
+
     onCompleteProfile({
       nome,
       nascimento,
       cidade,
       bairro,
       estado_sigla: estadoSigla,
-      latitude: -19.9167,
-      longitude: -43.9345,
+      latitude: initialData?.latitude || coords.lat,
+      longitude: initialData?.longitude || coords.lng,
       raio_busca: initialData?.raio_busca || 50,
       altura: parseFloat(altura) || 1.75,
       tipo_corporal: tipoCorporal,

@@ -23,6 +23,17 @@ import { MOCK_USERS, INITIAL_POSTS, INITIAL_LOTES, INITIAL_MATCHES, INITIAL_MESS
 import { getEstadoConfig } from './lib/estados';
 import { detectUserLocation, LocationDetectionResult, ESTADOS_COORDENADAS } from './lib/geolocation';
 
+function calculateAge(nascimento: string): number {
+  const birthDate = new Date(nascimento);
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
+}
+
 function safeGetJSON<T>(key: string, fallback: T): T {
   try {
     const item = localStorage.getItem(key);
@@ -244,7 +255,7 @@ export default function App() {
       id: 'user-admin-ornelas',
       nome: 'Edd Ornelas (Admin)',
       nascimento: '1995-04-10',
-      idade: 31,
+      idade: calculateAge('1995-04-10'),
       cidade: 'Belo Horizonte',
       bairro: 'Savassi',
       estado_sigla: currentEstadoSigla || 'MG',
@@ -259,6 +270,7 @@ export default function App() {
       exibir_na_busca: true,
       criado_em: new Date().toISOString(),
       isAdmin: true,
+      is_online: true,
     };
     setUsuarios((prev) => [newAdmin, ...prev]);
     setCurrentUser(newAdmin);
@@ -269,8 +281,9 @@ export default function App() {
     const newUser: UserProfile = {
       ...profileData,
       id: 'user-' + Date.now(),
-      idade: 25,
+      idade: calculateAge(profileData.nascimento),
       criado_em: new Date().toISOString(),
+      is_online: true,
     };
     setCurrentUser(newUser);
     setUsuarios((prev) => [newUser, ...prev]);
@@ -286,6 +299,53 @@ export default function App() {
       ...prev,
     ]);
     setRouteProtectionMsg(undefined);
+  };
+
+  const handleGoogleLogin = (userInfo: { name: string; email: string; picture: string }) => {
+    const existingUser = usuarios.find((u) => u.id === userInfo.email || (u.id.includes('user-') && u.nome === userInfo.name));
+
+    if (existingUser) {
+      setCurrentUser({ ...existingUser, is_online: true });
+      showSpendToast(`Bem-vindo de volta, ${existingUser.nome}! 💛`);
+    } else {
+      const newUser: UserProfile = {
+        id: userInfo.email,
+        nome: userInfo.name,
+        nascimento: '1998-05-20',
+        idade: calculateAge('1998-05-20'),
+        cidade: locationResult?.cidade || 'Belo Horizonte',
+        bairro: 'Centro',
+        estado_sigla: currentEstadoSigla,
+        latitude: locationResult?.latitude || -19.9167,
+        longitude: locationResult?.longitude || -43.9345,
+        raio_busca: 50,
+        altura: 1.75,
+        tipo_corporal: 'Normal',
+        foto: userInfo.picture,
+        descricao: `Novo mineiro chegando via Google! 💛`,
+        tipo_perfil: 'publico',
+        exibir_na_busca: true,
+        criado_em: new Date().toISOString(),
+        is_online: true,
+      };
+
+      setUsuarios((prev) => [newUser, ...prev]);
+      setCurrentUser(newUser);
+      setLotes((prev) => [
+        {
+          id: 'lote-google-' + Date.now(),
+          usuario_id: newUser.id,
+          quantidade: 50,
+          tipo: 'temp',
+          expira_em: new Date(Date.now() + 86400000 * 30).toISOString(),
+          criado_em: new Date().toISOString(),
+        },
+        ...prev,
+      ]);
+
+      showSpendToast(`Bem-vindo, ${newUser.nome}! 💛`);
+      setShowAuthModal(true); // Open edit modal to finish profile
+    }
   };
 
   // Helper: Deduct Certcoins with FIFO (Lote temporário mais antigo primeiro)
@@ -367,7 +427,7 @@ export default function App() {
     }
 
     if (!deductCertcoins(1)) {
-      alert('Eita! Cê precisa de 1 Certcoin para publicar!');
+      alert('Eita sô! Cê precisa de pelo menos 1 Certcoin pra postar tua prosa no feed! 💛');
       return;
     }
     const newPost: Postagem = {
@@ -513,9 +573,22 @@ export default function App() {
   };
 
   const handleUnlockReadReceipt = (alvoId: string) => {
-    if (!deductCertcoins(5)) return;
-    setReadReceipts((prev) => [...prev, alvoId]);
-    showSpendToast('Feito! 💛');
+    const cost = 5;
+    setSpendModalConfig({
+      isOpen: true,
+      costAmount: cost,
+      actionTitle: 'desbloquear a confirmação de leitura PARA SEMPRE nesta conversa',
+      onConfirm: () => {
+        if (!deductCertcoins(cost)) {
+          alert('Você não tem Certcoins suficientes!');
+          setSpendModalConfig((prev) => ({ ...prev, isOpen: false }));
+          return;
+        }
+        setReadReceipts((prev) => [...prev, alvoId]);
+        setSpendModalConfig((prev) => ({ ...prev, isOpen: false }));
+        showSpendToast('Feito! 💛');
+      },
+    });
   };
 
   const handleSendGift = (alvoId: string, qtd: number) => {
@@ -654,6 +727,7 @@ export default function App() {
           estadoConfig={estadoConfig}
           onSelectEstado={handleSelectEstado}
           onLogin={handleLogin}
+          onGoogleLogin={handleGoogleLogin}
           onRegister={handleRegister}
           protectionMsg={routeProtectionMsg || 'Precisa entrar primeiro pra ver teu espaço 💛'}
         />
@@ -687,7 +761,7 @@ export default function App() {
         setActiveTab={setActiveTab}
         onOpenCertcoins={() => setShowCertcoinsModal(true)}
         onOpenNotifications={() => setShowNotifsModal(true)}
-        onlineCount={usuarios.filter((u) => u.is_online).length + (currentUser?.is_online ? 1 : 0)}
+        onlineCount={usuarios.filter((u) => u.is_online).length}
       />
 
       {/* Banner de Autorização e Detecção Precisa de GPS */}
@@ -843,7 +917,11 @@ export default function App() {
           estadoConfig={estadoConfig}
           onClose={() => setShowAuthModal(false)}
           onCompleteProfile={(updates) => {
-            const updated = { ...currentUser, ...updates };
+            const updated = { 
+              ...currentUser, 
+              ...updates,
+              idade: updates.nascimento ? calculateAge(updates.nascimento) : currentUser.idade
+            };
             setCurrentUser(updated);
             setUsuarios((prev) => prev.map((u) => (u.id === currentUser.id ? updated : u)));
             setShowAuthModal(false);

@@ -18,8 +18,28 @@ export const EncontroView: React.FC<EncontroViewProps> = ({
   onSendLike,
 }) => {
   const [passedIds, setPassedIds] = useState<string[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
+  const [isSearching, setIsSearching] = useState(false);
+
+  const getSlang = () => {
+    switch (estadoConfig.sigla) {
+      case 'MG': return 'Bora procurar, uai! 🧀';
+      case 'RJ': return 'Bora buscar, mermão! 🏖️';
+      case 'SP': return 'Bora dar um rolê! 🏙️';
+      case 'BA': return 'Bora ver o que tem de bom, pai! 🥥';
+      case 'RS': return 'Bora buscar, tchê! 🧉';
+      default: return 'Bora procurar gente nova! ✨';
+    }
+  };
+
+  const handleRefresh = () => {
+    setIsSearching(true);
+    setTimeout(() => {
+      setPassedIds([]);
+      setIsSearching(false);
+      setActivePhotoIndex(0);
+    }, 5000);
+  };
 
   const availableUsers = usuarios.filter(
     (u) =>
@@ -29,7 +49,7 @@ export const EncontroView: React.FC<EncontroViewProps> = ({
       u.estado_sigla === currentUser.estado_sigla
   );
 
-  const currentUserTarget = availableUsers[currentIndex] || availableUsers[0];
+  const currentUserTarget = availableUsers[0];
 
   const handlePass = () => {
     if (!currentUserTarget) return;
@@ -54,12 +74,23 @@ export const EncontroView: React.FC<EncontroViewProps> = ({
   return (
     <div className="flex flex-col h-[calc(100vh-140px)] p-2 md:p-4 overflow-hidden">
       {/* Card Principal */}
-      {availableUsers.length === 0 || !currentUserTarget ? (
+      {isSearching ? (
+        <div className="flex-1 flex flex-col items-center justify-center bg-[#1E1915] rounded-3xl p-6 border border-[#382E24] text-center space-y-6">
+          <div className="relative">
+            <div className="w-20 h-20 border-4 border-[#E8A838]/20 border-t-[#E8A838] rounded-full animate-spin"></div>
+            <Heart className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 text-[#E8A838] animate-pulse" />
+          </div>
+          <div className="space-y-2">
+            <h3 className="text-xl font-black text-[#F5E9D3]">{getSlang()}</h3>
+            <p className="text-sm text-[#C8B8A0]">Estamos procurando as melhores conexões pra você...</p>
+          </div>
+        </div>
+      ) : availableUsers.length === 0 || !currentUserTarget ? (
         <div className="flex-1 flex flex-col items-center justify-center bg-[#1E1915] rounded-3xl p-6 border border-[#382E24] text-center space-y-4">
           <Heart className="w-16 h-16 text-[#E8A838] fill-[#E8A838]" />
           <h3 className="text-lg font-black text-[#F5E9D3]">Opa, o pessoal tá tímido! 💛</h3>
           <p className="text-xs text-[#C8B8A0]">Ainda não tem ninguém novo por aqui.</p>
-          <button onClick={() => setPassedIds([])} className="px-5 py-2.5 bg-[#E8A838] hover:brightness-110 text-[#120F0D] rounded-2xl font-black text-sm transition-all cursor-pointer">Ver se chegou gente nova 🔄</button>
+          <button onClick={handleRefresh} className="px-5 py-2.5 bg-[#E8A838] hover:brightness-110 text-[#120F0D] rounded-2xl font-black text-sm transition-all cursor-pointer">Ver se chegou gente nova 🔄</button>
         </div>
       ) : (
         <div className="flex-1 flex flex-col bg-[#1E1915] rounded-3xl border border-[#382E24] overflow-hidden shadow-2xl relative">

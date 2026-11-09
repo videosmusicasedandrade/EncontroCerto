@@ -40,7 +40,7 @@ export const MOCK_USERS: UserProfile[] = [
     tipo_perfil: 'publico',
     exibir_na_busca: true,
     criado_em: new Date().toISOString(),
-    is_online: true,
+    is_online: false,
   },
   {
     id: 'user-2',
@@ -60,7 +60,7 @@ export const MOCK_USERS: UserProfile[] = [
     tipo_perfil: 'publico',
     exibir_na_busca: true,
     criado_em: new Date().toISOString(),
-    is_online: false,
+    is_online: true,
   },
   {
     id: 'user-3',
@@ -80,7 +80,7 @@ export const MOCK_USERS: UserProfile[] = [
     tipo_perfil: 'privado',
     exibir_na_busca: true,
     criado_em: new Date().toISOString(),
-    is_online: true,
+    is_online: false,
   }
 ];
 
