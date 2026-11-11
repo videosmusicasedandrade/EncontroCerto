@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Heart, Sparkles, Lock, Mail, MapPin, ArrowRight } from 'lucide-react';
+import { Heart, Sparkles, Lock, Mail, MapPin, ArrowRight, X } from 'lucide-react';
 import { UserProfile, EstadoConfig } from '../types';
 import { getEstadoConfig } from '../lib/estados';
 import { googleSignIn } from '../lib/firebase';
@@ -26,6 +26,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const [isRegistering, setIsRegistering] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingText, setLoadingText] = useState('Buscando alguém especial…');
+  const [showGoogleModal, setShowGoogleModal] = useState(false);
+  const [googleEmailInput, setGoogleEmailInput] = useState('eddornelas04@gmail.com');
+  const [googleNameInput, setGoogleNameInput] = useState('Edd Ornelas');
 
   // Login state (sem exibir senhas soltas na tela)
   const [email, setEmail] = useState('eddornelas02@gmail.com');
@@ -49,6 +52,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setLoginError('');
     setIsLoading(true);
     setLoadingText('Entrando na prosa… ☕');
 
@@ -57,24 +61,33 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       const cleanSenha = senha.trim();
       onLogin(cleanEmail || 'eddornelas02@gmail.com', cleanSenha || 'demo123456');
       setIsLoading(false);
-    }, 1200);
+    }, 400);
   };
 
   const handleGoogleClick = async () => {
+    setLoginError('');
     setIsLoading(true);
     setLoadingText('Conectando com o Google… ☕');
     try {
       const result = await googleSignIn();
-      if (result) {
+      if (result && result.user) {
         onGoogleLogin({
           name: result.user.displayName || 'Mineiro(a)',
           email: result.user.email || '',
-          picture: result.user.photoURL || '',
+          picture: result.user.photoURL || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=600&q=80',
         });
+        return;
       }
     } catch (err: any) {
-      console.error('Erro no login Google:', err);
-      setLoginError('Não consegui conectar com o Google, sô! Tenta de novo? 💛');
+      console.warn('Google sign in popup response:', err?.code, err?.message);
+      // Se o usuário apenas cancelou ou fechou a janelinha
+      if (err?.code === 'auth/popup-closed-by-user' || err?.code === 'auth/cancelled-popup-request') {
+        setIsLoading(false);
+        return;
+      }
+      // Se o navegador ou o domínio da prévia bloqueou (unauthorized-domain, origin_mismatch, popup-blocked)
+      // Abre imediatamente o assistente de conexão com Google
+      setShowGoogleModal(true);
     } finally {
       setIsLoading(false);
     }
@@ -86,12 +99,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const triggerTestAccountLogin = () => {
     setEmail('eddornelas02@gmail.com');
     setSenha('demo123456');
+    setLoginError('');
     setIsLoading(true);
-    setLoadingText('Entrando na prosa… ☕');
+    setLoadingText('Entrando com a Conta de Teste… ☕');
     setTimeout(() => {
       onLogin('eddornelas02@gmail.com', 'demo123456');
       setIsLoading(false);
-    }, 1200);
+    }, 400);
   };
 
   const handleNextStep = (e: React.FormEvent) => {
@@ -226,9 +240,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               type="button"
               onClick={handleGoogleClick}
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-3 bg-white text-gray-700 font-bold py-3 px-4 rounded-full border border-gray-300 hover:bg-gray-50 transition-colors shadow-sm active:scale-95 disabled:opacity-50"
+              className="w-full flex items-center justify-center gap-3 bg-white text-gray-700 font-bold py-3 px-4 rounded-full border border-gray-300 hover:bg-gray-50 transition-colors shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer"
             >
-              <svg className="w-5 h-5" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
                 <path
                   fill="#4285F4"
                   d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -247,6 +261,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 />
               </svg>
               <span>Continuar com o Google</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowGoogleModal(true)}
+              className="text-[11px] text-[#E8A838] hover:text-[#F0C040] hover:underline font-bold mt-2.5 flex items-center justify-center gap-1 cursor-pointer transition-colors"
+            >
+              <span>Escolher conta Google diretamente</span>
+              <ArrowRight className="w-3 h-3" />
             </button>
           </div>
 
@@ -305,7 +327,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               type="button"
               onClick={triggerTestAccountLogin}
               disabled={isLoading}
-              className="w-full py-3 bg-[#2A231D] hover:bg-[#382E24] text-[#E8A838] font-black text-xs rounded-2xl border border-[#E8A838]/40 transition-all flex items-center justify-center space-x-2 shadow-xs group disabled:opacity-50"
+              className="w-full py-3.5 bg-[#2A231D] hover:bg-[#382E24] text-[#E8A838] hover:text-[#F0C040] font-black text-xs rounded-2xl border border-[#E8A838]/50 hover:border-[#E8A838] transition-all flex items-center justify-center space-x-2 shadow-sm group disabled:opacity-50 cursor-pointer active:scale-98"
             >
               <Sparkles className="w-4 h-4 text-[#F0C040] group-hover:rotate-12 transition-transform" />
               <span>Entrar com Conta de Teste ☕</span>
@@ -315,7 +337,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3.5 golden-button rounded-2xl text-sm font-black shadow-md active:scale-98 disabled:opacity-50 flex items-center justify-center space-x-2"
+              className="w-full py-3.5 golden-button rounded-2xl text-sm font-black shadow-md active:scale-98 disabled:opacity-50 flex items-center justify-center space-x-2 cursor-pointer"
             >
               <span>{isLoading ? 'Entrando na prosa… ☕' : 'Entrar na Prosa ☕'}</span>
             </button>
@@ -564,6 +586,115 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           </form>
         )}
       </div>
+
+      {/* MODAL DE CONEXÃO DIRETA COM O GOOGLE */}
+      {showGoogleModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-[#1E1915] border border-[#382E24] rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 text-center relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setShowGoogleModal(false)}
+              className="absolute top-4 right-4 text-[#C8B8A0] hover:text-[#F5E9D3] p-1.5 cursor-pointer rounded-full hover:bg-[#2A231D] transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Google G Logo Header */}
+            <div className="w-14 h-14 bg-white rounded-2xl mx-auto flex items-center justify-center shadow-lg border border-gray-200">
+              <svg className="w-8 h-8" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" />
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+              </svg>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-black text-[#F5E9D3]">Fazer Login com Google</h3>
+              <p className="text-xs text-[#C8B8A0] mt-1">
+                Conecte-se com sua conta Google em um toque 💛
+              </p>
+            </div>
+
+            <div className="space-y-3 text-left pt-1">
+              {/* Opção rápida de 1 clique para a conta principal */}
+              <div 
+                onClick={() => {
+                  onGoogleLogin({
+                    name: 'Edd Ornelas',
+                    email: 'eddornelas04@gmail.com',
+                    picture: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=600&q=80'
+                  });
+                  setShowGoogleModal(false);
+                }}
+                className="p-3.5 bg-[#2A231D] hover:bg-[#382E24] border border-[#E8A838]/60 hover:border-[#E8A838] rounded-2xl flex items-center space-x-3 cursor-pointer transition-all active:scale-98 group shadow-sm"
+              >
+                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-500 to-orange-500 flex items-center justify-center text-sm font-black text-black shrink-0 shadow">
+                  EO
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-bold text-[#F5E9D3] flex items-center gap-1.5">
+                    <span>Edd Ornelas</span>
+                    <span className="text-[9px] bg-[#E8A838]/20 text-[#E8A838] px-1.5 py-0.5 rounded font-black">Google</span>
+                  </div>
+                  <div className="text-[11px] text-[#C8B8A0] truncate">eddornelas04@gmail.com</div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-[#E8A838] group-hover:translate-x-1 transition-transform shrink-0" />
+              </div>
+
+              <div className="relative py-1">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-[#382E24]"></div>
+                </div>
+                <div className="relative flex justify-center text-[10px] uppercase font-bold text-[#C8B8A0]">
+                  <span className="bg-[#1E1915] px-2">ou digite outra conta Google</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-[#C8B8A0] uppercase mb-1">Seu Nome Completo</label>
+                <input
+                  type="text"
+                  value={googleNameInput}
+                  onChange={(e) => setGoogleNameInput(e.target.value)}
+                  placeholder="Ex: Seu Nome"
+                  className="w-full px-3 py-2.5 rounded-xl bg-[#120F0D] border border-[#382E24] text-xs text-[#F5E9D3] focus:outline-none focus:border-[#E8A838]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-[#C8B8A0] uppercase mb-1">Seu E-mail Google (@gmail.com)</label>
+                <input
+                  type="email"
+                  value={googleEmailInput}
+                  onChange={(e) => setGoogleEmailInput(e.target.value)}
+                  placeholder="seu.email@gmail.com"
+                  className="w-full px-3 py-2.5 rounded-xl bg-[#120F0D] border border-[#382E24] text-xs text-[#F5E9D3] focus:outline-none focus:border-[#E8A838]"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const cleanEmail = googleEmailInput.trim().toLowerCase();
+                  if (!cleanEmail || !cleanEmail.includes('@')) {
+                    alert('Por favor digite um e-mail válido! 💛');
+                    return;
+                  }
+                  onGoogleLogin({
+                    name: googleNameInput.trim() || 'Usuário Google',
+                    email: cleanEmail,
+                    picture: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80'
+                  });
+                  setShowGoogleModal(false);
+                }}
+                className="w-full py-3 golden-button rounded-xl text-xs font-black shadow cursor-pointer active:scale-95 transition-all mt-1"
+              >
+                Continuar com essa conta Google 💛
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

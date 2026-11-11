@@ -24,6 +24,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onLogout,
 }) => {
   const [showStateModal, setShowStateModal] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   return (
     <div className="max-w-2xl mx-auto py-6 px-4 space-y-6 text-[#F5E9D3]">
@@ -129,10 +130,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             defaultChecked
             className="w-5 h-5 cursor-pointer"
             style={{ accentColor: estadoConfig.cor }}
-            onChange={(e) => {
-              if (e.target.checked) {
-                alert(`Quer receber um aviso quando alguém te mandar mensagem? ${estadoConfig.emblem} (Ativado com sucesso!)`);
-              }
+            onChange={() => {
+              // Notificações ativadas
             }}
           />
         </div>
@@ -175,22 +174,49 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         {/* 6. Sair (Prompt 3.1: "Ir embora… volta quando quiser 💛") */}
         <div className="pt-4 border-t border-[#382E24] space-y-2">
           <button
-            onClick={() => {
-              try {
-                if (window.confirm('Deseja realmente sair da sua conta?\n\nIr embora… volta quando quiser 💛')) {
-                  onLogout();
-                }
-              } catch (e) {
-                onLogout();
-              }
-            }}
-            className="w-full py-3.5 rounded-2xl bg-[#2A231D] hover:bg-red-950/40 text-[#D1704A] font-black text-xs border border-[#382E24] transition-colors flex items-center justify-center space-x-2 cursor-pointer active:scale-95"
+            type="button"
+            onClick={() => setShowLogoutConfirm(true)}
+            className="w-full py-3.5 rounded-2xl bg-[#2A231D] hover:bg-red-950/40 text-[#D1704A] hover:text-red-400 font-black text-xs border border-[#382E24] transition-colors flex items-center justify-center space-x-2 cursor-pointer active:scale-95 shadow-sm"
           >
             <LogOut className="w-4 h-4 text-[#D1704A]" />
             <span>Ir embora… volta quando quiser 💛</span>
           </button>
         </div>
       </div>
+
+      {/* MODAL DE CONFIRMAÇÃO DE SAÍDA */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-[#1E1915] border border-[#382E24] rounded-3xl max-w-xs w-full p-6 text-center space-y-4 shadow-2xl animate-scaleIn">
+            <div className="w-14 h-14 rounded-2xl mx-auto flex items-center justify-center bg-red-950/60 border border-red-800/60 text-[#D1704A] shadow-md">
+              <LogOut className="w-7 h-7" />
+            </div>
+            <div>
+              <h3 className="text-base font-black text-[#F5E9D3]">Sair da conta?</h3>
+              <p className="text-xs text-[#C8B8A0] mt-1">Ir embora… volta quando quiser 💛</p>
+            </div>
+            <div className="flex space-x-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowLogoutConfirm(false)}
+                className="flex-1 py-2.5 bg-[#2A231D] text-[#C8B8A0] hover:text-[#F5E9D3] rounded-xl text-xs font-bold border border-[#382E24] cursor-pointer transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLogoutConfirm(false);
+                  onLogout();
+                }}
+                className="flex-1 py-2.5 bg-gradient-to-r from-red-600 to-rose-700 text-white rounded-xl text-xs font-black shadow cursor-pointer active:scale-95 transition-transform"
+              >
+                Sair 💛
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

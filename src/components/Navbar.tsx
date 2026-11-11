@@ -29,6 +29,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onlineCount,
   onLogout,
 }) => {
+  const [showLogoutConfirm, setShowLogoutConfirm] = React.useState(false);
   const tempLotes = lotes.filter((l) => l.tipo === 'temp');
   const totalTemp = tempLotes.reduce((acc, l) => acc + l.quantidade, 0);
 
@@ -185,13 +186,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
 
               <button
-                onClick={() => {
-                  if (window.confirm('Deseja realmente sair? 💛')) {
-                    onLogout();
-                  }
-                }}
-                className="p-2 rounded-full bg-[#2A231D] hover:bg-red-950/40 border border-[#382E24] text-[#D1704A] hover:text-red-400 transition-colors cursor-pointer"
-                title="Sair"
+                type="button"
+                onClick={() => setShowLogoutConfirm(true)}
+                className="p-2 rounded-full bg-[#2A231D] hover:bg-red-950/40 border border-[#382E24] text-[#D1704A] hover:text-red-400 transition-colors cursor-pointer active:scale-95 shadow-sm"
+                title="Sair da conta"
               >
                 <LogOut className="w-4 h-4" />
               </button>
@@ -248,6 +246,40 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         </div>
       </header>
+
+      {/* MODAL DE CONFIRMAÇÃO DE SAÍDA (100% livre de bloqueios do navegador) */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-[#1E1915] border border-[#382E24] rounded-3xl max-w-xs w-full p-6 text-center space-y-4 shadow-2xl animate-scaleIn">
+            <div className="w-14 h-14 rounded-2xl mx-auto flex items-center justify-center bg-red-950/60 border border-red-800/60 text-[#D1704A] shadow-md">
+              <LogOut className="w-7 h-7" />
+            </div>
+            <div>
+              <h3 className="text-base font-black text-[#F5E9D3]">Sair da conta?</h3>
+              <p className="text-xs text-[#C8B8A0] mt-1">Ir embora… volta quando quiser 💛</p>
+            </div>
+            <div className="flex space-x-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowLogoutConfirm(false)}
+                className="flex-1 py-2.5 bg-[#2A231D] text-[#C8B8A0] hover:text-[#F5E9D3] rounded-xl text-xs font-bold border border-[#382E24] cursor-pointer transition-colors"
+              >
+                Ficar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLogoutConfirm(false);
+                  onLogout();
+                }}
+                className="flex-1 py-2.5 bg-gradient-to-r from-red-600 to-rose-700 text-white rounded-xl text-xs font-black shadow cursor-pointer active:scale-95 transition-transform"
+              >
+                Sair 💛
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };
