@@ -1,0 +1,168 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Perfil de usuário do Encontro Certo Brasil",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "ID único do usuário ou Google UID"
+        },
+        "nome": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Nome de exibição"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 150,
+          "description": "E-mail do usuário"
+        },
+        "cidade": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Cidade de residência"
+        },
+        "estado_sigla": {
+          "type": "string",
+          "maxLength": 2,
+          "description": "Sigla do estado brasileiro"
+        },
+        "foto": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "URL da foto principal"
+        },
+        "descricao": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Bio de apresentação"
+        },
+        "is_online": {
+          "type": "boolean",
+          "description": "Status online em tempo real"
+        },
+        "isAdmin": {
+          "type": "boolean",
+          "description": "Flag de moderador ou administrador"
+        },
+        "criado_em": {
+          "type": "string",
+          "description": "Data de criação em ISO"
+        }
+      },
+      "required": ["id", "nome", "email", "estado_sigla", "criado_em"]
+    },
+    "CertcoinLote": {
+      "title": "CertcoinLote",
+      "description": "Lote de moedas Certcoins do usuário",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "usuario_id": {
+          "type": "string"
+        },
+        "quantidade": {
+          "type": "number"
+        },
+        "tipo": {
+          "type": "string",
+          "enum": ["temp", "vitalicio"]
+        },
+        "criado_em": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "usuario_id", "quantidade", "tipo", "criado_em"]
+    },
+    "Postagem": {
+      "title": "Postagem",
+      "description": "Postagem do feed comunitário regional",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "usuario_id": {
+          "type": "string"
+        },
+        "autor_nome": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "autor_foto": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "foto": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "legenda": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "curtidas": {
+          "type": "number"
+        },
+        "estado_sigla": {
+          "type": "string",
+          "maxLength": 2
+        },
+        "criado_em": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "usuario_id", "autor_nome", "foto", "legenda", "criado_em"]
+    },
+    "Mensagem": {
+      "title": "Mensagem",
+      "description": "Mensagem de chat entre pessoas conectadas",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "remetente_id": {
+          "type": "string"
+        },
+        "destinatario_id": {
+          "type": "string"
+        },
+        "conteudo": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "tipo": {
+          "type": "string"
+        },
+        "criado_em": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "remetente_id", "destinatario_id", "conteudo", "criado_em"]
+    }
+  },
+  "firestore": {
+    "/usuarios/{usuarioId}": {
+      "schema": "UserProfile",
+      "description": "Coleção de perfis de usuário"
+    },
+    "/lotes/{loteId}": {
+      "schema": "CertcoinLote",
+      "description": "Coleção de saldos de Certcoins"
+    },
+    "/posts/{postId}": {
+      "schema": "Postagem",
+      "description": "Coleção de posts do feed"
+    },
+    "/mensagens/{mensagemId}": {
+      "schema": "Mensagem",
+      "description": "Coleção de mensagens privadas de bate-papo"
+    }
+  }
+}

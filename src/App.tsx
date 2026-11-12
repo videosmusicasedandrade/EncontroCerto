@@ -352,21 +352,29 @@ export default function App() {
   };
 
   const handleGoogleLogin = (userInfo: { name: string; email: string; picture: string }) => {
-    const existingUser = usuarios.find((u) => u.email === userInfo.email);
+    const cleanEmail = (userInfo.email || '').trim().toLowerCase();
+    const existingUser = usuarios.find((u) => (u.email || '').trim().toLowerCase() === cleanEmail);
+    const isOwnerAdmin = cleanEmail === 'eddornelas04@gmail.com' || cleanEmail === 'eddornelas02@gmail.com';
 
     if (existingUser) {
-      const updated = { ...existingUser, is_online: true };
+      const updated: UserProfile = { 
+        ...existingUser, 
+        is_online: true,
+        isAdmin: isOwnerAdmin ? true : existingUser.isAdmin 
+      };
       setCurrentUser(updated);
       setUsuarios((prev) => prev.map((u) => (u.id === existingUser.id ? updated : u)));
+      localStorage.setItem('encontro_certo_current_user', JSON.stringify(updated));
+      setRouteProtectionMsg(undefined);
       showSpendToast(`Bem-vindo de volta, ${existingUser.nome}! 💛`);
     } else {
       const newUser: UserProfile = {
-        id: 'google-' + userInfo.email,
-        email: userInfo.email,
-        nome: userInfo.name,
+        id: 'google-' + (cleanEmail ? cleanEmail.replace(/[^a-z0-9]/g, '-') : Date.now()),
+        email: cleanEmail,
+        nome: (userInfo.name || '').trim() || (cleanEmail ? cleanEmail.split('@')[0] : 'Mineiro(a)'),
         nascimento: '1998-05-20',
         idade: calculateAge('1998-05-20'),
-        cidade: locationResult?.cidade || 'Belo Horizonte',
+        cidade: locationResult?.cidade || (currentEstadoSigla === 'MG' ? 'Belo Horizonte' : 'Capital'),
         bairro: 'Centro',
         estado_sigla: currentEstadoSigla,
         latitude: locationResult?.latitude || -19.9167,
@@ -374,16 +382,20 @@ export default function App() {
         raio_busca: 50,
         altura: 1.75,
         tipo_corporal: 'Normal',
-        foto: userInfo.picture,
-        descricao: `Novo mineiro chegando via Google! 💛`,
+        foto: userInfo.picture || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=600&q=80',
+        descricao: `Novo mineiro chegando pelo Google! 💛`,
         tipo_perfil: 'publico',
         exibir_na_busca: true,
+        isAdmin: isOwnerAdmin,
         criado_em: new Date().toISOString(),
         is_online: true,
       };
 
       setUsuarios((prev) => [newUser, ...prev]);
       setCurrentUser(newUser);
+      localStorage.setItem('encontro_certo_current_user', JSON.stringify(newUser));
+      setRouteProtectionMsg(undefined);
+
       setLotes((prev) => [
         {
           id: 'lote-google-' + Date.now(),
@@ -396,7 +408,7 @@ export default function App() {
         ...prev,
       ]);
 
-      showSpendToast(`Bem-vindo, ${newUser.nome}! 💛`);
+      showSpendToast(`Conta Google criada com sucesso! Ganhou 50 Certcoins! 🚀💛`);
       setShowAuthModal(true); // Open edit modal to finish profile
     }
   };

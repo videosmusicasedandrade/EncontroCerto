@@ -29,6 +29,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const [showGoogleModal, setShowGoogleModal] = useState(false);
   const [googleEmailInput, setGoogleEmailInput] = useState('eddornelas04@gmail.com');
   const [googleNameInput, setGoogleNameInput] = useState('Edd Ornelas');
+  const [googleModalError, setGoogleModalError] = useState('');
 
   // Login state (sem exibir senhas soltas na tela)
   const [email, setEmail] = useState('eddornelas02@gmail.com');
@@ -227,20 +228,22 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           </button>
         </div>
 
-        {/* Google Login Section (Always Visible) */}
-        <div className="space-y-4 animate-fadeIn">
+        {/* Google Login / Register Section (Always Visible) */}
+        <div className="space-y-3 animate-fadeIn">
           <div className="flex items-center space-x-3">
             <div className="flex-1 h-[1px] bg-[#382E24]" />
-            <span className="text-[10px] font-black text-[#C8B8A0] uppercase">Prosa rápida com</span>
+            <span className="text-[10px] font-black text-[#C8B8A0] uppercase">
+              {isRegistering ? '⚡ Cadastro Instantâneo em 1 Clique' : '☕ Acesso Rápido com Google'}
+            </span>
             <div className="flex-1 h-[1px] bg-[#382E24]" />
           </div>
           
-          <div className="flex flex-col items-center justify-center min-h-[44px]">
+          <div className="flex flex-col items-center justify-center">
             <button
               type="button"
               onClick={handleGoogleClick}
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-3 bg-white text-gray-700 font-bold py-3 px-4 rounded-full border border-gray-300 hover:bg-gray-50 transition-colors shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer"
+              className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-100 text-gray-800 font-black py-3.5 px-4 rounded-2xl border border-gray-300 shadow-md active:scale-95 disabled:opacity-50 cursor-pointer transition-all"
             >
               <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
                 <path
@@ -260,21 +263,33 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                   d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                 />
               </svg>
-              <span>Continuar com o Google</span>
+              <span>{isRegistering ? 'Cadastrar com o Google ⚡' : 'Entrar com o Google ☕'}</span>
             </button>
+
+            {isRegistering && (
+              <span className="text-[11px] text-[#E8A838] font-bold mt-1.5 flex items-center gap-1">
+                <span>🎁 Cria sua conta na hora e ganhe 50 Certcoins de presente!</span>
+              </span>
+            )}
+
             <button
               type="button"
-              onClick={() => setShowGoogleModal(true)}
-              className="text-[11px] text-[#E8A838] hover:text-[#F0C040] hover:underline font-bold mt-2.5 flex items-center justify-center gap-1 cursor-pointer transition-colors"
+              onClick={() => {
+                setGoogleModalError('');
+                setShowGoogleModal(true);
+              }}
+              className="text-[11px] text-[#C8B8A0] hover:text-[#E8A838] hover:underline font-bold mt-2 flex items-center justify-center gap-1 cursor-pointer transition-colors"
             >
-              <span>Escolher conta Google diretamente</span>
-              <ArrowRight className="w-3 h-3" />
+              <span>{isRegistering ? 'Ou cadastrar com outra conta Google diretamente' : 'Ou escolher conta Google diretamente'}</span>
+              <ArrowRight className="w-3 h-3 text-[#E8A838]" />
             </button>
           </div>
 
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-3 pt-1">
             <div className="flex-1 h-[1px] bg-[#382E24]" />
-            <span className="text-[10px] font-black text-[#C8B8A0] uppercase">ou use e-mail</span>
+            <span className="text-[10px] font-black text-[#C8B8A0] uppercase">
+              {isRegistering ? 'ou preencher cadastro manual' : 'ou entrar com e-mail'}
+            </span>
             <div className="flex-1 h-[1px] bg-[#382E24]" />
           </div>
         </div>
@@ -609,13 +624,23 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             </div>
 
             <div>
-              <h3 className="text-lg font-black text-[#F5E9D3]">Fazer Login com Google</h3>
+              <h3 className="text-lg font-black text-[#F5E9D3]">
+                {isRegistering ? 'Cadastrar com o Google ⚡' : 'Entrar com o Google ☕'}
+              </h3>
               <p className="text-xs text-[#C8B8A0] mt-1">
-                Conecte-se com sua conta Google em um toque 💛
+                {isRegistering 
+                  ? 'Cria seu perfil na hora e já ganha 50 Certcoins de presente! 💛' 
+                  : 'Conecte-se com sua conta Google em um toque 💛'}
               </p>
             </div>
 
             <div className="space-y-3 text-left pt-1">
+              {googleModalError && (
+                <div className="p-2.5 rounded-xl bg-red-950/60 border border-red-800 text-red-200 text-xs font-bold text-center">
+                  {googleModalError}
+                </div>
+              )}
+
               {/* Opção rápida de 1 clique para a conta principal */}
               <div 
                 onClick={() => {
@@ -634,7 +659,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 <div className="flex-1 min-w-0">
                   <div className="text-xs font-bold text-[#F5E9D3] flex items-center gap-1.5">
                     <span>Edd Ornelas</span>
-                    <span className="text-[9px] bg-[#E8A838]/20 text-[#E8A838] px-1.5 py-0.5 rounded font-black">Google</span>
+                    <span className="text-[9px] bg-[#E8A838]/20 text-[#E8A838] px-1.5 py-0.5 rounded font-black">
+                      {isRegistering ? '+50 🪙' : 'Google'}
+                    </span>
                   </div>
                   <div className="text-[11px] text-[#C8B8A0] truncate">eddornelas04@gmail.com</div>
                 </div>
@@ -646,7 +673,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                   <div className="w-full border-t border-[#382E24]"></div>
                 </div>
                 <div className="relative flex justify-center text-[10px] uppercase font-bold text-[#C8B8A0]">
-                  <span className="bg-[#1E1915] px-2">ou digite outra conta Google</span>
+                  <span className="bg-[#1E1915] px-2">ou usar outra conta Google</span>
                 </div>
               </div>
 
@@ -666,7 +693,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 <input
                   type="email"
                   value={googleEmailInput}
-                  onChange={(e) => setGoogleEmailInput(e.target.value)}
+                  onChange={(e) => {
+                    setGoogleEmailInput(e.target.value);
+                    if (googleModalError) setGoogleModalError('');
+                  }}
                   placeholder="seu.email@gmail.com"
                   className="w-full px-3 py-2.5 rounded-xl bg-[#120F0D] border border-[#382E24] text-xs text-[#F5E9D3] focus:outline-none focus:border-[#E8A838]"
                 />
@@ -676,12 +706,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 type="button"
                 onClick={() => {
                   const cleanEmail = googleEmailInput.trim().toLowerCase();
-                  if (!cleanEmail || !cleanEmail.includes('@')) {
-                    alert('Por favor digite um e-mail válido! 💛');
+                  if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+                    setGoogleModalError('Por favor digite um e-mail válido! 💛');
                     return;
                   }
                   onGoogleLogin({
-                    name: googleNameInput.trim() || 'Usuário Google',
+                    name: googleNameInput.trim() || cleanEmail.split('@')[0],
                     email: cleanEmail,
                     picture: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80'
                   });
@@ -689,7 +719,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 }}
                 className="w-full py-3 golden-button rounded-xl text-xs font-black shadow cursor-pointer active:scale-95 transition-all mt-1"
               >
-                Continuar com essa conta Google 💛
+                {isRegistering ? 'Cadastrar com essa conta Google ⚡' : 'Entrar com essa conta Google ☕'}
               </button>
             </div>
           </div>
